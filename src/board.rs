@@ -30,6 +30,14 @@ impl Board {
         self.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
     }
 
+    pub fn occupied_squares(self) -> u64 {
+        self.colors[Color::White as usize] | self.colors[Color::Black as usize]
+    }
+
+    pub fn empty_squares(self) -> u64 {
+        !(self.colors[Color::White as usize] | self.colors[Color::Black as usize])
+    }
+
     ///Sets board state from a FEN string
     pub fn from_fen(&mut self, fen: &str) -> Result<(), &'static str> {
         let mut parts = fen.split_whitespace();

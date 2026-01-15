@@ -1,4 +1,5 @@
 mod board;
+mod movegen;
 mod moves;
 mod types;
 
