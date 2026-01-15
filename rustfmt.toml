@@ -1,7 +1,6 @@
 wrap_comments = false
 max_width = 160
 fn_call_width = 140
-struct_lit_width = 60             #When struct literals break on multiple lines
-use_small_heuristics = "Max"      #Keeps stuff on 1 line as much as possible
+struct_lit_width = 60           #When struct literals break on multiple lines
+use_small_heuristics = "Max"    #Keeps stuff on 1 line as much as possible
 fn_params_layout = "Compressed"
-match_block_trailing_comma = true

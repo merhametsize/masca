@@ -1,5 +1,3 @@
-use std::mem::MaybeUninit;
-
 use crate::types::{Color, NULL_SQUARE, Piece, PieceType};
 
 const MAX_PLY: usize = 128;
@@ -10,10 +8,10 @@ pub struct Board {
     colors: [u64; 2],              //Per-color occupancy
     side_to_move: Color,
 
-    state_stack: [MaybeUninit<State>; MAX_PLY],
+    state_stack: [State; MAX_PLY],
     state_idx: usize,
 }
-
+#[derive(Copy, Clone)]
 pub struct State {
     castling: u8,
     en_passant: u8,
@@ -49,36 +47,30 @@ impl Board {
         self.state_idx = 0;
 
         // ===== Parse board squares =====
-        let mut sq_idx = 0;
-        for rank in board_part.split('/') {
+        for (rank_idx, rank) in board_part.split('/').enumerate() {
+            let rank_num = 7 - rank_idx; //FEN top rank = 7
             let mut file = 0;
+
             for ch in rank.chars() {
                 if ch.is_digit(10) {
-                    let incr = ch.to_digit(10).unwrap() as usize;
-                    file += incr;
-                    sq_idx += incr;
+                    let skip = ch.to_digit(10).unwrap() as usize;
+                    file += skip;
                 } else {
-                    if sq_idx >= 64 {
-                        return Err("Too many squares in FEN");
-                    }
+                    let sq = rank_num * 8 + file;
                     let piece = Piece::from_char(ch);
-                    self.mailbox[sq_idx] = Some(piece);
+                    self.mailbox[sq] = Some(piece);
 
                     let color = piece.get_color();
                     let ptype = piece.get_type();
-                    self.pieces[ptype as usize] |= 1 << sq_idx;
-                    self.colors[color as usize] |= 1 << sq_idx;
+                    self.pieces[ptype as usize] |= 1 << sq;
+                    self.colors[color as usize] |= 1 << sq;
 
                     file += 1;
-                    sq_idx += 1;
                 }
             }
             if file != 8 {
                 return Err("Invalid FEN rank length");
             }
-        }
-        if sq_idx != 64 {
-            return Err("Invalid FEN: not enough squares");
         }
 
         // ===== Parse side to move =====
@@ -96,7 +88,7 @@ impl Board {
                 'Q' => castling |= 1 << 1,
                 'k' => castling |= 1 << 2,
                 'q' => castling |= 1 << 3,
-                '-' => {},
+                '-' => {}
                 _ => return Err("Invalid castling"),
             }
         }
@@ -115,13 +107,13 @@ impl Board {
         };
 
         // ===== Set initial state =====
-        self.state_stack[0] = MaybeUninit::new(State {
+        self.state_stack[0] = State {
             castling,
             en_passant,
-            halfmove: halfmove_part.parse().unwrap_or(0),
+            halfmove: halfmove_part.parse().unwrap_or_default(),
             captured: Option::None,
             zobrist: 0,
-        });
+        };
         self.state_idx = 1;
 
         Ok(())
@@ -155,8 +147,20 @@ impl Default for Board {
             colors: [0; 2],
             side_to_move: Color::White,
 
-            state_stack: unsafe { MaybeUninit::uninit().assume_init() },
+            state_stack: [State::default(); MAX_PLY],
             state_idx: 0,
+        }
+    }
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            castling: 0,
+            en_passant: 0,
+            halfmove: 0,
+            captured: Option::None,
+            zobrist: 0,
         }
     }
 }
