@@ -1,11 +1,11 @@
 use std::mem::MaybeUninit;
 
-use crate::types::{Color, NULL_SQUARE, PIECE_2_CHAR, Piece, PieceType};
+use crate::types::{Color, NULL_SQUARE, Piece, PieceType};
 
 const MAX_PLY: usize = 128;
 
 pub struct Board {
-    mailbox: [Piece; 64],
+    mailbox: [Option<Piece>; 64],
     pieces: [u64; PieceType::NUM], //p,n,b,r,q,k, color agnostic
     colors: [u64; 2],              //Per-color occupancy
     side_to_move: Color,
@@ -18,7 +18,7 @@ pub struct State {
     castling: u8,
     en_passant: u8,
     halfmove: usize,
-    captured: Piece, //Which piece was captured
+    captured: Option<Piece>, //Which piece was captured
     zobrist: u64,
 }
 
@@ -43,7 +43,7 @@ impl Board {
         let _ = parts.next().unwrap_or("1"); //fullmove
 
         //Reset board
-        self.mailbox.fill(Piece::None);
+        self.mailbox.fill(Option::None);
         self.pieces.fill(0);
         self.colors = [0; 2];
         self.state_idx = 0;
@@ -61,19 +61,11 @@ impl Board {
                     if sq_idx >= 64 {
                         return Err("Too many squares in FEN");
                     }
-                    let piece = PIECE_2_CHAR.iter().find(|(_, c)| *c == ch).map(|(p, _)| *p).ok_or("Invalid piece char in FEN")?;
-                    self.mailbox[sq_idx] = piece;
+                    let piece = Piece::from_char(ch);
+                    self.mailbox[sq_idx] = Some(piece);
 
-                    let color = if ch.is_lowercase() { Color::White } else { Color::Black };
-                    let ptype = match piece {
-                        Piece::WhitePawn | Piece::BlackPawn => PieceType::Pawn,
-                        Piece::WhiteKnight | Piece::BlackKnight => PieceType::Knight,
-                        Piece::WhiteBishop | Piece::BlackBishop => PieceType::Bishop,
-                        Piece::WhiteRook | Piece::BlackRook => PieceType::Rook,
-                        Piece::WhiteQueen | Piece::BlackQueen => PieceType::Queen,
-                        Piece::WhiteKing | Piece::BlackKing => PieceType::King,
-                        Piece::None => continue,
-                    };
+                    let color = piece.get_color();
+                    let ptype = piece.get_type();
                     self.pieces[ptype as usize] |= 1 << sq_idx;
                     self.colors[color as usize] |= 1 << sq_idx;
 
@@ -104,7 +96,7 @@ impl Board {
                 'Q' => castling |= 1 << 1,
                 'k' => castling |= 1 << 2,
                 'q' => castling |= 1 << 3,
-                '-' => {}
+                '-' => {},
                 _ => return Err("Invalid castling"),
             }
         }
@@ -127,7 +119,7 @@ impl Board {
             castling,
             en_passant,
             halfmove: halfmove_part.parse().unwrap_or(0),
-            captured: Piece::None,
+            captured: Option::None,
             zobrist: 0,
         });
         self.state_idx = 1;
@@ -144,8 +136,7 @@ impl Board {
             print!("{} |", rank + 1);
             for file in 0..8 {
                 let sq = rank * 8 + file;
-                let piece = self.mailbox[sq];
-                let ch = PIECE_2_CHAR.iter().find(|(p, _)| *p == piece).map(|(_, c)| *c).unwrap_or('.');
+                let ch = self.mailbox[sq].map_or('.', |p| p.to_char());
                 print!(" {} ", ch);
             }
             println!("|");
@@ -159,7 +150,7 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self {
-            mailbox: [Piece::None; 64],
+            mailbox: [Option::None; 64],
             pieces: [0; PieceType::NUM],
             colors: [0; 2],
             side_to_move: Color::White,
