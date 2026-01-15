@@ -3,12 +3,12 @@ use crate::types::{Color, NULL_SQUARE, Piece, PieceType};
 const MAX_PLY: usize = 128;
 
 pub struct Board {
-    mailbox: [Option<Piece>; 64],
+    mailbox: [Option<Piece>; 64],  //Piece-centric redundant representation
     pieces: [u64; PieceType::NUM], //p,n,b,r,q,k, color agnostic
     colors: [u64; 2],              //Per-color occupancy
     side_to_move: Color,
 
-    state_stack: [State; MAX_PLY],
+    state_stack: [State; MAX_PLY], //Array of states for move unmake
     state_idx: usize,
 }
 #[derive(Copy, Clone)]

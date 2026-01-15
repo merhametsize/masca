@@ -1,4 +1,5 @@
 mod board;
+mod moves;
 mod types;
 
 use board::Board;
