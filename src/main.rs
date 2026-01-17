@@ -1,3 +1,4 @@
+mod attack;
 mod board;
 mod movegen;
 mod moves;

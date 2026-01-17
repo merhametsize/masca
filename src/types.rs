@@ -1,3 +1,7 @@
+pub type Bitboard = u64;
+
+pub const NULL_SQUARE: u8 = 64; //For en-passant
+
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Color {
@@ -92,5 +96,3 @@ impl Piece {
         }
     }
 }
-
-pub const NULL_SQUARE: u8 = 64; //For en-passant

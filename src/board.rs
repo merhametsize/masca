@@ -1,11 +1,11 @@
-use crate::types::{Color, NULL_SQUARE, Piece, PieceType};
+use crate::types::{Bitboard, Color, NULL_SQUARE, Piece, PieceType};
 
 const MAX_PLY: usize = 128;
 
 pub struct Board {
-    mailbox: [Option<Piece>; 64],  //Piece-centric redundant representation
-    pieces: [u64; PieceType::NUM], //p,n,b,r,q,k, color agnostic
-    colors: [u64; 2],              //Per-color occupancy
+    mailbox: [Option<Piece>; 64],       //Piece-centric redundant representation
+    pieces: [Bitboard; PieceType::NUM], //p,n,b,r,q,k, color agnostic
+    colors: [Bitboard; 2],              //Per-color occupancy
     side_to_move: Color,
 
     state_stack: [State; MAX_PLY], //Array of states for move unmake
@@ -17,7 +17,7 @@ pub struct State {
     en_passant: u8,
     halfmove: usize,
     captured: Option<Piece>, //Which piece was captured
-    zobrist: u64,
+    zobrist: Bitboard,
 }
 
 impl Board {
@@ -30,11 +30,11 @@ impl Board {
         self.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
     }
 
-    pub fn occupied_squares(self) -> u64 {
+    pub fn occupied_squares(self) -> Bitboard {
         self.colors[Color::White as usize] | self.colors[Color::Black as usize]
     }
 
-    pub fn empty_squares(self) -> u64 {
+    pub fn empty_squares(self) -> Bitboard {
         !(self.colors[Color::White as usize] | self.colors[Color::Black as usize])
     }
 
