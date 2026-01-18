@@ -1,4 +1,4 @@
-pub type Bitboard = u64;
+use std::ops::{Index, IndexMut};
 
 pub const NULL_SQUARE: u8 = 64; //For en-passant
 
@@ -7,6 +7,20 @@ pub const NULL_SQUARE: u8 = 64; //For en-passant
 pub enum Color {
     White = 0,
     Black = 1,
+}
+
+/// Allows for array indexing without explicit conversion of Color to usize.
+/// Example: `array[Color::White]`
+impl<T> Index<Color> for [T] {
+    type Output = T;
+    fn index(&self, index: Color) -> &Self::Output {
+        unsafe { self.get_unchecked(index as usize) }
+    }
+}
+impl<T> IndexMut<Color> for [T] {
+    fn index_mut(&mut self, index: Color) -> &mut Self::Output {
+        unsafe { self.get_unchecked_mut(index as usize) }
+    }
 }
 
 #[repr(u8)]
@@ -22,6 +36,20 @@ pub enum PieceType {
 
 impl PieceType {
     pub const NUM: usize = 6;
+}
+
+/// Allows for array indexing without explicit conversion of Color to usize.
+/// Example: `array[Color::White]`
+impl<T> Index<PieceType> for [T] {
+    type Output = T;
+    fn index(&self, index: PieceType) -> &Self::Output {
+        unsafe { self.get_unchecked(index as usize) }
+    }
+}
+impl<T> IndexMut<PieceType> for [T] {
+    fn index_mut(&mut self, index: PieceType) -> &mut Self::Output {
+        unsafe { self.get_unchecked_mut(index as usize) }
+    }
 }
 
 #[repr(u8)]

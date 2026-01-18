@@ -1,4 +1,5 @@
-use crate::types::{Bitboard, Color, NULL_SQUARE, Piece, PieceType};
+use crate::bitboard::Bitboard;
+use crate::types::{Color, NULL_SQUARE, Piece, PieceType};
 
 const MAX_PLY: usize = 128;
 
@@ -31,11 +32,11 @@ impl Board {
     }
 
     pub fn occupied_squares(self) -> Bitboard {
-        self.colors[Color::White as usize] | self.colors[Color::Black as usize]
+        self.colors[Color::White] | self.colors[Color::Black]
     }
 
     pub fn empty_squares(self) -> Bitboard {
-        !(self.colors[Color::White as usize] | self.colors[Color::Black as usize])
+        !(self.colors[Color::White] | self.colors[Color::Black])
     }
 
     ///Sets board state from a FEN string
@@ -50,8 +51,8 @@ impl Board {
 
         //Reset board
         self.mailbox.fill(Option::None);
-        self.pieces.fill(0);
-        self.colors = [0; 2];
+        self.pieces.fill(Bitboard(0));
+        self.colors = [Bitboard(0); 2];
         self.state_idx = 0;
 
         // ===== Parse board squares =====
@@ -61,17 +62,18 @@ impl Board {
 
             for ch in rank.chars() {
                 if ch.is_digit(10) {
-                    let skip = ch.to_digit(10).unwrap() as usize;
+                    let skip = ch.to_digit(10).unwrap();
                     file += skip;
                 } else {
-                    let sq = rank_num * 8 + file;
+                    let sq = rank_num * 8 + file as usize;
                     let piece = Piece::from_char(ch);
                     self.mailbox[sq] = Some(piece);
 
                     let color = piece.get_color();
                     let ptype = piece.get_type();
-                    self.pieces[ptype as usize] |= 1 << sq;
-                    self.colors[color as usize] |= 1 << sq;
+                    let sq_bb = Bitboard::from_square(sq);
+                    self.pieces[ptype] |= sq_bb;
+                    self.colors[color] |= sq_bb;
 
                     file += 1;
                 }
@@ -120,7 +122,7 @@ impl Board {
             en_passant,
             halfmove: halfmove_part.parse().unwrap_or_default(),
             captured: Option::None,
-            zobrist: 0,
+            zobrist: Bitboard(0),
         };
         self.state_idx = 1;
 
@@ -151,8 +153,8 @@ impl Default for Board {
     fn default() -> Self {
         Self {
             mailbox: [Option::None; 64],
-            pieces: [0; PieceType::NUM],
-            colors: [0; 2],
+            pieces: [Bitboard(0); PieceType::NUM],
+            colors: [Bitboard(0); 2],
             side_to_move: Color::White,
 
             state_stack: [State::default(); MAX_PLY],
@@ -168,7 +170,7 @@ impl Default for State {
             en_passant: 0,
             halfmove: 0,
             captured: Option::None,
-            zobrist: 0,
+            zobrist: Bitboard(0),
         }
     }
 }
