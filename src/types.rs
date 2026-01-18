@@ -3,7 +3,7 @@ use std::ops::{Index, IndexMut};
 pub const NULL_SQUARE: u8 = 64; //For en-passant
 
 #[repr(u8)]
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Color {
     White = 0,
     Black = 1,
@@ -53,7 +53,7 @@ impl<T> IndexMut<PieceType> for [T] {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone)]
 pub enum Piece {
     WhitePawn = 0,
     WhiteKnight,

@@ -14,7 +14,5 @@ fn main() {
     board.set_startpos();
     board.print();
 
-    attack::init_attack_tables();
-    let mut f = std::fs::File::create("attack_tables.debug").unwrap();
-    ATTACK_TABLES.get().unwrap().write(&mut f).unwrap();
+    let atk = attack::init_attack_tables();
 }

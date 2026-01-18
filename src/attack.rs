@@ -38,13 +38,13 @@ impl AttackTables {
 
         // Initializes the attack table for each square
         for sq in 0..64 {
-            let from_rank = sq / 8;
-            let from_file = sq % 8;
+            let from_rank = (sq / 8) as i8;
+            let from_file = (sq % 8) as i8;
 
             // ****************** KNIGHT ******************
             for (delta_rank, delta_file) in KNIGHT_DELTAS {
-                let to_rank = (from_rank as i8) + delta_rank;
-                let to_file = (from_file as i8) + delta_file;
+                let to_rank = from_rank + delta_rank;
+                let to_file = from_file + delta_file;
 
                 if (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
                     knight[sq] |= Bitboard::from_square((to_rank * 8 + to_file) as usize);
@@ -53,8 +53,8 @@ impl AttackTables {
 
             // ****************** KING ******************
             for (delta_rank, delta_file) in KING_DELTAS {
-                let to_rank = (from_rank as i8) + delta_rank;
-                let to_file = (from_file as i8) + delta_file;
+                let to_rank = from_rank + delta_rank;
+                let to_file = from_file + delta_file;
 
                 if (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
                     king[sq] |= Bitboard::from_square((to_rank * 8 + to_file) as usize);
