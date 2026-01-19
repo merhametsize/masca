@@ -1,10 +1,9 @@
-//! Attack tables generation
+//! Attack table generation.
 //!
-//! This module contains the logic necessary for attack tables generation on startup. Such tables
-//! are essentially look-up tables, that are queried in order to get the possible moves given a piece type
-//! and a square. The tables are queried by either `[square]` or `[color][square]`.
-//! For sliding pieces, rays and relevant occupancy masks are generated instead of normal attack tables, since such
-//! pieces require either PEXT or magic bitboards in order to generate attacks from a given board occupancy.
+//! This module generates attack look-up tables for knights, kings and pawns.
+//! Tables provide possible moves for a given piece type and square, queried via `[square]` or `[color][square]`.
+//!
+//! Sliding pieces are handled differently (in magics.rs) because of board occupancy.
 
 use crate::bitboard::Bitboard;
 use crate::types::Color;
@@ -24,11 +23,10 @@ pub struct AttackTables {
 const KNIGHT_DELTAS: [(i8, i8); 8] = [(2, 1), (2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2), (-2, 1), (-2, -1)];
 const KING_DELTAS: [(i8, i8); 8] = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)];
 
-/// Rust discourages the use of static global variables because of the lack of thread safety. Rust enforces the use of
-/// unsafe{} in order to access such variables. The idiomatic way to define static global variables in Rust is to use a OnceLock.
-/// A OnceLock object is initialized exactly once, is thread safe, immutable, accessible anywhere. It does 1 atomic check on
-/// first access. After that, only pointer dereference. It has 0 performance cost in practice. After initialization,
-/// ATTACK_TABLES.get().unwrap() compiles to a single load, with no locks nor branches.
+//// Global attack tables, initialized once at startup.
+///
+/// This `OnceLock` holds the precomputed `AttackTables` and ensures
+/// thread-safe, one-time initialization. Access the tables with:
 pub static ATTACK_TABLES: OnceLock<AttackTables> = OnceLock::new();
 
 /// Computes the attack tables and stores them into the global variable ATTACK_TABLES.

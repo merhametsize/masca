@@ -13,6 +13,7 @@
 mod attack;
 mod bitboard;
 mod board;
+mod magics;
 mod movegen;
 mod moves;
 mod types;
