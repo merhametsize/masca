@@ -148,7 +148,7 @@ impl Board {
     }
 
     /// Prints the board to console terminal for debug.
-    #[cfg(debug_assertions)]
+    // #[cfg(debug_assertions)]
     pub fn print(&self) {
         println!("Side to move: {:?}", self.side_to_move);
         println!("  +------------------------+");
