@@ -1,3 +1,7 @@
+//! Low-level move encoding.
+//!
+//! This module contains the logic to encode a move in 16 bits.
+
 use crate::types::PieceType;
 
 /// 16-bit encoded move.
@@ -35,72 +39,82 @@ pub enum MoveType {
 }
 
 impl Move {
-    /// Null-move definition required for null-move pruning
+    /// Null-move definition required for null-move pruning.
     pub const NULL_MOVE: Move = Move { encoding: 0 };
 
-    /// Encodes a "normal" move
+    /// Encodes a "normal" move.
     pub const fn new_normal(from: u8, to: u8) -> Self {
         Self { encoding: (from as u16) | ((to as u16) << 6) }
     }
 
-    /// Encodes a "special" move (double push, castling, capture, en passant, promotion)
+    /// Encodes a "special" move (double push, castling, capture, en passant, promotion).
     pub const fn new_special(from: u8, to: u8, movetype: MoveType) -> Self {
         Self {
             encoding: (from as u16 | ((to as u16) << 6) | ((movetype as u16) << 12)),
         }
     }
 
+    /// Returns the origin square.
     #[inline(always)]
     pub const fn from_square(self) -> u8 {
         (self.encoding & 0x3F) as u8
     }
 
+    /// Returns the destination square.
     #[inline(always)]
     pub const fn to_square(self) -> u8 {
         ((self.encoding >> 6) & 0x3F) as u8
     }
 
+    /// Checks whether the move is a capture.
     #[inline(always)]
     pub const fn is_capture(self) -> bool {
         (self.encoding & 0x4000) != 0
     }
 
+    /// Checks whether the move is a promotion.
     #[inline(always)]
     pub const fn is_promotion(self) -> bool {
         (self.encoding & 0x8000) != 0
     }
 
+    /// Makes the enum self-aware, returns the move type.
     #[inline(always)]
     pub const fn get_type(self) -> MoveType {
         unsafe { core::mem::transmute((self.encoding >> 12) as u8) }
     }
 
+    /// Checks whether the move is quiet.
     #[inline(always)]
     pub const fn is_quiet(self) -> bool {
         (self.encoding & 0xF000) == 0
     }
 
+    /// Checks whether the move is noisy.
     #[inline(always)]
     pub const fn is_noisy(self) -> bool {
         (self.encoding & 0xC000) != 0
     }
 
+    /// Checks whether the move is castling.
     #[inline(always)]
     pub const fn is_castling(self) -> bool {
         (self.encoding & 0xE000) == 0x2000
     }
 
+    /// Checks whether the move is en-passant.
     #[inline(always)]
     pub const fn is_enpassant(self) -> bool {
         (self.encoding & 0xF000) == 0x5000
     }
 
+    /// Checks whether the move is a double pawn push.
     #[inline(always)]
     pub const fn is_double_push(self) -> bool {
         (self.encoding & 0xF000) == 0x1000
     }
 
-    /// Does not check if the move is actually a promotion
+    /// Returns the piece you get after a pawn promotion.
     #[inline(always)]
     pub const fn get_promotion_piece(self) -> PieceType {
         debug_assert!(self.is_promotion());

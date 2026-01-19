@@ -1,8 +1,17 @@
+//! Chessboard representation
+//!
+//! This module contains the implementation of the Board object, representing a Bord configuration along with its
+//! present state and past states, allowing for make/unmake move. The State object is memorized in a stack inside Board.
+
 use crate::bitboard::Bitboard;
 use crate::types::{Color, NULL_SQUARE, Piece, PieceType};
 
 const MAX_PLY: usize = 128;
 
+/// Chess board representation.
+///
+/// This structure maintains multiple redundant representations of the position to enable fast move generation and evaluation.
+/// It also owns a stack of incremental states used to undo moves efficiently.
 pub struct Board {
     mailbox: [Option<Piece>; 64],       //Piece-centric redundant representation
     pieces: [Bitboard; PieceType::NUM], //p,n,b,r,q,k, color agnostic
@@ -12,6 +21,11 @@ pub struct Board {
     state_stack: [State; MAX_PLY], //Array of states for move unmake
     state_idx: usize,
 }
+
+/// Incremental game state information.
+///
+/// This structure stores the minimal information required to unmake a move and restore the previous position.
+/// It is intended to be pushed onto `state_stack` during move execution.
 #[derive(Copy, Clone)]
 pub struct State {
     castling: u8,
@@ -26,20 +40,24 @@ impl Board {
         Self::default()
     }
 
-    ///Sets board to the starting position
+    /// Sets board to the starting position.
+    /// # Panics
+    /// Panics if the internal FEN parser fails.
     pub fn set_startpos(&mut self) {
         self.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
     }
 
+    /// Returns which squares are occupied by a piece of any color.
     pub fn occupied_squares(self) -> Bitboard {
         self.colors[Color::White] | self.colors[Color::Black]
     }
 
+    /// Returns empty squares.
     pub fn empty_squares(self) -> Bitboard {
         !(self.colors[Color::White] | self.colors[Color::Black])
     }
 
-    ///Sets board state from a FEN string
+    /// Sets board state from a FEN string
     pub fn from_fen(&mut self, fen: &str) -> Result<(), &'static str> {
         let mut parts = fen.split_whitespace();
         let board_part = parts.next().ok_or("FEN missing board part")?;
@@ -49,7 +67,7 @@ impl Board {
         let halfmove_part = parts.next().unwrap_or("0");
         let _ = parts.next().unwrap_or("1"); //fullmove
 
-        //Reset board
+        //R eset board
         self.mailbox.fill(Option::None);
         self.pieces.fill(Bitboard(0));
         self.colors = [Bitboard(0); 2];
@@ -129,6 +147,8 @@ impl Board {
         Ok(())
     }
 
+    /// Prints the board to console terminal for debug.
+    #[cfg(debug_assertions)]
     pub fn print(&self) {
         println!("Side to move: {:?}", self.side_to_move);
         println!("  +------------------------+");

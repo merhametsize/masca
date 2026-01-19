@@ -75,6 +75,7 @@ impl Piece {
         if (self as u8) & 1 == 0 { Color::White } else { Color::Black }
     }
 
+    /// Makes the enum self-aware, returns the piece-type.
     pub const fn get_type(self) -> PieceType {
         match (self as u8) >> 1 {
             0 => PieceType::Pawn,
@@ -87,6 +88,7 @@ impl Piece {
         }
     }
 
+    /// Converts Piece to a character.
     #[rustfmt::skip]
     pub const fn to_char(self) -> char {
         match self {
@@ -105,6 +107,7 @@ impl Piece {
         }
     }
 
+    /// Creates Piece from a character.
     #[rustfmt::skip]
     pub const fn from_char(ch: char) -> Self {
         match ch {

@@ -1,7 +1,13 @@
+//! Bitboard object definition
+//!
+//! This module contains the definition of the Bitboard object, and the overloading of bitwise operators.
+//! Using a Bitboard object makes for more type-safety as it cannot be used with other u64 variables of
+//! the engine, such as masks, squares, attacks and more.
+
 use std::fmt;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, Not};
 
-/// Bitboard object overloading logical operators.
+/// Bitboard object defined as a struct with unnamed u64 field.
 #[repr(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Bitboard(pub u64);

@@ -1,9 +1,18 @@
+//! Attack tables generation
+//!
+//! This module contains the logic necessary for attack tables generation on startup. Such tables
+//! are essentially look-up tables, that are queried in order to get the possible moves given a piece type
+//! and a square. The tables are queried by either `[square]` or `[color][square]`.
+//! For sliding pieces, rays and relevant occupancy masks are generated instead of normal attack tables, since such
+//! pieces require either PEXT or magic bitboards in order to generate attacks from a given board occupancy.
+
 use crate::bitboard::Bitboard;
 use crate::types::Color;
 
 use std::io::Write;
 use std::sync::OnceLock;
 
+/// Contains the attack look-up tables per piece.
 pub struct AttackTables {
     pub knight: [Bitboard; 64],
     pub king: [Bitboard; 64],
@@ -15,7 +24,6 @@ pub struct AttackTables {
 const KNIGHT_DELTAS: [(i8, i8); 8] = [(2, 1), (2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2), (-2, 1), (-2, -1)];
 const KING_DELTAS: [(i8, i8); 8] = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)];
 
-/// Global struct containing the attack maps for pieces.
 /// Rust discourages the use of static global variables because of the lack of thread safety. Rust enforces the use of
 /// unsafe{} in order to access such variables. The idiomatic way to define static global variables in Rust is to use a OnceLock.
 /// A OnceLock object is initialized exactly once, is thread safe, immutable, accessible anywhere. It does 1 atomic check on
@@ -23,7 +31,7 @@ const KING_DELTAS: [(i8, i8); 8] = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-
 /// ATTACK_TABLES.get().unwrap() compiles to a single load, with no locks nor branches.
 pub static ATTACK_TABLES: OnceLock<AttackTables> = OnceLock::new();
 
-/// Computes the per-square attack tables and stores them into the global static variable ATTACK_TABLES.
+/// Computes the attack tables and stores them into the global variable ATTACK_TABLES.
 pub fn init_attack_tables() -> &'static AttackTables {
     ATTACK_TABLES.get_or_init(AttackTables::new)
 }
@@ -101,6 +109,7 @@ impl AttackTables {
         Self { knight, king, pawn_capture, pawn_push, pawn_double_push }
     }
 
+    /// Writes the attack tables on a buffer for debug purposes.
     #[cfg(debug_assertions)]
     pub fn write<W: Write>(&self, out: &mut W) -> std::io::Result<()> {
         writeln!(out, "*********************************KNIGHT*********************************")?;
