@@ -8,6 +8,7 @@
 //! - `board.rs`: chessboard representation
 //! - `movegen.rs`: move generation
 //! - `attack.rs`: attack tables generation on startup
+//! - `magics.rs`: sliding piece attack generation on startup
 //! - `moves.rs`: low-level move representation
 
 mod attack;
@@ -23,11 +24,6 @@ use board::Board;
 use crate::magics::MagicTables;
 
 fn main() {
-    let mut board = Board::new();
-    board.set_startpos();
-    board.print();
-
-    let mut magic_tables = MagicTables::new();
-    magic_tables.generate_magics();
-    magic_tables.print();
+    let attack_tables = attack::AttackTables::new();
+    attack_tables.print();
 }

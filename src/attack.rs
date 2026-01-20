@@ -6,10 +6,10 @@
 //! Sliding pieces are handled differently (in magics.rs) because of board occupancy.
 
 use crate::bitboard::Bitboard;
+use crate::magics::MagicTables;
 use crate::types::Color;
 
 use std::io::Write;
-use std::sync::OnceLock;
 
 /// Contains the attack look-up tables per piece.
 pub struct AttackTables {
@@ -18,21 +18,12 @@ pub struct AttackTables {
     pub pawn_capture: [[Bitboard; 64]; 2],
     pub pawn_push: [[Bitboard; 64]; 2],
     pub pawn_double_push: [[Bitboard; 64]; 2],
+
+    pub magic_tables: MagicTables,
 }
 
 const KNIGHT_DELTAS: [(i8, i8); 8] = [(2, 1), (2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2), (-2, 1), (-2, -1)];
 const KING_DELTAS: [(i8, i8); 8] = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)];
-
-//// Global attack tables, initialized once at startup.
-///
-/// This `OnceLock` holds the precomputed `AttackTables` and ensures
-/// thread-safe, one-time initialization. Access the tables with:
-pub static ATTACK_TABLES: OnceLock<AttackTables> = OnceLock::new();
-
-/// Computes the attack tables and stores them into the global variable ATTACK_TABLES.
-pub fn init_attack_tables() -> &'static AttackTables {
-    ATTACK_TABLES.get_or_init(AttackTables::new)
-}
 
 impl AttackTables {
     pub fn new() -> Self {
@@ -104,44 +95,56 @@ impl AttackTables {
             }
         }
 
-        Self { knight, king, pawn_capture, pawn_push, pawn_double_push }
+        // Generates sliding piece attacks
+        let mut magic_tables = MagicTables::new();
+        magic_tables.generate_magics();
+
+        Self {
+            knight,
+            king,
+            pawn_capture,
+            pawn_push,
+            pawn_double_push,
+            magic_tables,
+        }
     }
 
     /// Writes the attack tables on a buffer for debug purposes.
-    #[cfg(debug_assertions)]
-    pub fn write<W: Write>(&self, out: &mut W) -> std::io::Result<()> {
-        writeln!(out, "*********************************KNIGHT*********************************")?;
-        for sq in 0..64 {
-            writeln!(out, "{}", self.knight[sq])?;
+    pub fn print(&self) {
+        use std::io::{Write, stdout};
+        let mut out = stdout();
+
+        fn print_section<W: Write>(out: &mut W, title: &str, boards: &[Bitboard]) -> std::io::Result<()> {
+            writeln!(out, "\n=== {} ===", title)?;
+            // Print 4 bitboards per row
+            let per_row = 4;
+            for row in (0..boards.len()).step_by(per_row) {
+                for i in 0..per_row {
+                    if row + i < boards.len() {
+                        write!(out, "{:2}: {:016X}  ", row + i, boards[row + i].0)?;
+                    }
+                }
+                writeln!(out)?;
+            }
+            Ok(())
         }
-        writeln!(out, "*********************************KING*********************************")?;
-        for sq in 0..64 {
-            writeln!(out, "{}", self.king[sq])?;
-        }
-        writeln!(out, "*********************************PAWN CAPTURE (WHITE)*********************************")?;
-        for sq in 0..64 {
-            writeln!(out, "{}", self.pawn_capture[Color::White][sq])?;
-        }
-        writeln!(out, "*********************************PAWN PUSH (WHITE)*********************************")?;
-        for sq in 0..64 {
-            writeln!(out, "{}", self.pawn_push[Color::White][sq])?;
-        }
-        writeln!(out, "*********************************PAWN DOUBLE PUSH (WHITE)*********************************")?;
-        for sq in 0..64 {
-            writeln!(out, "{}", self.pawn_double_push[Color::White][sq])?;
-        }
-        writeln!(out, "*********************************PAWN CAPTURE (BLACK)*********************************")?;
-        for sq in 0..64 {
-            writeln!(out, "{}", self.pawn_capture[Color::Black][sq])?;
-        }
-        writeln!(out, "*********************************PAWN PUSH (BLACK)*********************************")?;
-        for sq in 0..64 {
-            writeln!(out, "{}", self.pawn_push[Color::Black][sq])?;
-        }
-        writeln!(out, "*********************************PAWN DOUBLE PUSH (BLACK)*********************************")?;
-        for sq in 0..64 {
-            writeln!(out, "{}", self.pawn_double_push[Color::Black][sq])?;
-        }
-        Ok(())
+
+        // Knights
+        print_section(&mut out, "KNIGHT", &self.knight).unwrap();
+
+        // Kings
+        print_section(&mut out, "KING", &self.king).unwrap();
+
+        // Pawns
+        print_section(&mut out, "PAWN CAPTURE (WHITE)", &self.pawn_capture[Color::White]).unwrap();
+        print_section(&mut out, "PAWN PUSH (WHITE)", &self.pawn_push[Color::White]).unwrap();
+        print_section(&mut out, "PAWN DOUBLE PUSH (WHITE)", &self.pawn_double_push[Color::White]).unwrap();
+
+        print_section(&mut out, "PAWN CAPTURE (BLACK)", &self.pawn_capture[Color::Black]).unwrap();
+        print_section(&mut out, "PAWN PUSH (BLACK)", &self.pawn_push[Color::Black]).unwrap();
+        print_section(&mut out, "PAWN DOUBLE PUSH (BLACK)", &self.pawn_double_push[Color::Black]).unwrap();
+
+        println!("");
+        self.magic_tables.print();
     }
 }

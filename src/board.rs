@@ -40,6 +40,18 @@ impl Board {
         Self::default()
     }
 
+    /// Returns a specific bitboard from `self.pieces`.
+    #[inline(always)]
+    pub fn piece(&self, piece_type: PieceType) -> Bitboard {
+        self.pieces[piece_type as usize]
+    }
+
+    /// Returns a specific bitboard from `self.colors`.
+    #[inline(always)]
+    pub fn color(&self, color: Color) -> Bitboard {
+        self.colors[color as usize]
+    }
+
     /// Sets board to the starting position.
     /// # Panics
     /// Panics if the internal FEN parser fails.
@@ -48,12 +60,12 @@ impl Board {
     }
 
     /// Returns which squares are occupied by a piece of any color.
-    pub fn occupied_squares(self) -> Bitboard {
+    pub fn occupied_squares(&self) -> Bitboard {
         self.colors[Color::White] | self.colors[Color::Black]
     }
 
     /// Returns empty squares.
-    pub fn empty_squares(self) -> Bitboard {
+    pub fn empty_squares(&self) -> Bitboard {
         !(self.colors[Color::White] | self.colors[Color::Black])
     }
 

@@ -1,9 +1,9 @@
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Not};
 
 pub const NULL_SQUARE: u8 = 64; //For en-passant
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Color {
     White = 0,
     Black = 1,
@@ -17,9 +17,21 @@ impl<T> Index<Color> for [T] {
         unsafe { self.get_unchecked(index as usize) }
     }
 }
+
 impl<T> IndexMut<Color> for [T] {
     fn index_mut(&mut self, index: Color) -> &mut Self::Output {
         unsafe { self.get_unchecked_mut(index as usize) }
+    }
+}
+
+impl Not for Color {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Self::White => Self::Black,
+            Self::Black => Self::White,
+        }
     }
 }
 

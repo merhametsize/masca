@@ -55,6 +55,14 @@ impl Bitboard {
         let file_index = sq % 8;
         Self(0x0101_0101_0101_0101u64 << file_index)
     }
+
+    /// Pops the LSB from the bitboard, in-place
+    #[inline(always)]
+    pub fn pop_lsb(&mut self) -> usize {
+        let lsb = self.0.trailing_zeros() as usize;
+        self.0 &= self.0 - 1;
+        lsb
+    }
 }
 
 impl fmt::Display for Bitboard {
@@ -118,5 +126,18 @@ impl Not for Bitboard {
 
     fn not(self) -> Self::Output {
         Self(!self.0)
+    }
+}
+
+impl Iterator for Bitboard {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0 == 0 {
+            None
+        } else {
+            let lsb = self.pop_lsb();
+            Some(lsb)
+        }
     }
 }
