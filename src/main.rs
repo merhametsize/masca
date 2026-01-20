@@ -29,4 +29,5 @@ fn main() {
 
     let mut magic_tables = MagicTables::new();
     magic_tables.generate_magics();
+    magic_tables.print();
 }

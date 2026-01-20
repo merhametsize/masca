@@ -31,7 +31,7 @@ const BISHOP_DELTAS: [(i8, i8); 4] = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
 ///     2 ^ (number of relevant rook occupancy bits on that square)
 ///
 /// Central squares have up to 12 relevant bits, edge squares fewer.
-/// The exact total is 102,400.
+/// The exact total is 102400.
 const ROOK_MAP_SIZE: usize = 102400; // Σ over sq=0..63 (2 ^ rook_relevant_bits[sq])
 /// Total number of bishop magic attack entries.
 ///
@@ -39,7 +39,7 @@ const ROOK_MAP_SIZE: usize = 102400; // Σ over sq=0..63 (2 ^ rook_relevant_bits
 ///     2 ^ (number of relevant bishop occupancy bits on that square)
 ///
 /// Central squares have up to 9 relevant bits.
-/// The exact total is 5,248.
+/// The exact total is 5248.
 const BISHOP_MAP_SIZE: usize = 5248; // Σ over sq=0..63 (2 ^ bishop_relevant_bits[sq])
 
 /// Precomputed magic bitboard data for sliding piece attack generation.
@@ -95,119 +95,83 @@ impl MagicTables {
         let rook_attacks = self.generate_all_rook_attacks();
         let bishop_attacks = self.generate_all_bishop_attacks();
 
-        let mut rook_offset = 0usize;
-        let mut bishop_offset = 0usize;
+        Self::search_loop(&self.rook_masks, &rook_attacks, &mut self.rook_magics, &mut self.rook_offsets, &mut self.rook_attacks);
+        Self::search_loop(&self.bishop_masks, &bishop_attacks, &mut self.bishop_magics, &mut self.bishop_offsets, &mut self.bishop_attacks);
 
-        let mut rng = SmallRng::seed_from_u64(0xD10FAu64);
+        // Invariant check
+        let total_rook_slots: usize = self.rook_masks.iter().map(|m| 1usize << m.0.count_ones()).sum();
+        let total_bishop_slots: usize = self.bishop_masks.iter().map(|m| 1usize << m.0.count_ones()).sum();
+        assert_eq!(total_rook_slots, ROOK_MAP_SIZE);
+        assert_eq!(total_bishop_slots, BISHOP_MAP_SIZE);
+    }
 
-        // --- ROOKS ---
+    /// Searches for magic numbers and builds a flat attack table for sliding pieces.
+    ///
+    /// For each square:
+    /// - Enumerates all relevant blocker occupancies
+    /// - Searches for a magic multiplier that maps occupancies to unique attack entries (equal attacks are mapped to the same entry)
+    /// - Stores the magic number and the starting offset into the flat attack table
+    /// - Writes the per-square attack table contiguously into `flat_table`
+    ///
+    /// The resulting lookup is branchless and O(1):
+    ///     index = offsets[sq] + ((occ & mask) * magic >> shift)
+    /// A flat table is preferred to a matrix since different squares have a different number of relevant occupancies.
+    fn search_loop(masks: &[Bitboard; 64], attacks: &Vec<Vec<Bitboard>>, magics: &mut [u64; 64], offsets: &mut [usize; 64], flat_table: &mut [Bitboard]) {
+        let mut offset = 0usize;
+
         for sq in 0..64 {
-            let mask = self.rook_masks[sq];
+            let mut rng = SmallRng::seed_from_u64(0xD10FA ^ (sq as u64 * 0xD10BE571A)); //🥚
+
+            let mask = masks[sq];
             let relevant_bits = mask.0.count_ones() as usize;
             let table_size = 1 << relevant_bits;
-
-            let occupancies = Self::enumerate_occupancies(mask);
-            let attacks = &rook_attacks[sq];
-
             let shift = 64 - relevant_bits;
 
-            let mut attempts: usize = 0;
+            let occupancies = Self::enumerate_occupancies(mask);
+            debug_assert!(occupancies.len() == (1 << relevant_bits));
+
+            let mut temp_table = vec![None; table_size];
+
             'search: for _attempt in 0..10_000_000 {
                 let magic = Self::sparse_random(&mut rng);
 
-                // Quick entropy rejection (thanks Stockfish). If high bits are mostly zero -> more collisions.
+                // Quick entropy rejection (from Stockfish). If high bits are mostly zero -> more collisions.
                 if (mask.0.wrapping_mul(magic) & 0xFF00_0000_0000_0000).count_ones() < 6 {
                     continue;
                 }
 
-                let mut used = vec![None; table_size];
+                temp_table.fill(None);
 
                 for i in 0..occupancies.len() {
                     let occ = occupancies[i].0;
                     let index = ((occ & mask.0).wrapping_mul(magic) >> shift) as usize;
 
-                    match used[index] {
-                        None => used[index] = Some(attacks[i]),
-                        Some(existing) if existing == attacks[i] => {}
-                        _ => continue 'search, // Collision
+                    match temp_table[index] {
+                        None => temp_table[index] = Some(attacks[sq][i]),
+                        Some(existing) if existing == attacks[sq][i] => {} //Two different occupancies may produce the same attack
+                        _ => continue 'search,                             // Collision
                     }
                 }
 
                 // Found valid magic
-                self.rook_magics[sq] = magic;
-                self.rook_offsets[sq] = rook_offset;
+                magics[sq] = magic;
+                offsets[sq] = offset;
 
                 for i in 0..table_size {
-                    self.rook_attacks[rook_offset + i] = used[i].unwrap_or(Bitboard(0));
+                    flat_table[offset + i] = temp_table[i].unwrap_or(Bitboard(0)); //The candidate magics are copied
                 }
 
-                rook_offset += table_size;
-                println!("Square {}: magic found = 0x{:016X}", sq, magic);
+                offset += table_size; //Next square
                 break;
             }
         }
-
-        // --- BISHOPS ---
-        for sq in 0..64 {
-            let mask = self.bishop_masks[sq];
-            let relevant_bits = mask.0.count_ones() as usize;
-            let table_size = 1 << relevant_bits;
-
-            let occupancies = Self::enumerate_occupancies(mask);
-            let attacks = &bishop_attacks[sq];
-
-            let shift = 64 - relevant_bits;
-
-            'search: for _attempt in 0..10_000_000 {
-                let magic = Self::sparse_random(&mut rng);
-
-                if (mask.0.wrapping_mul(magic) & 0xFF00_0000_0000_0000).count_ones() < 6 {
-                    continue;
-                }
-
-                let mut used = vec![None; table_size];
-
-                for i in 0..occupancies.len() {
-                    let occ = occupancies[i].0;
-                    let index = ((occ & mask.0).wrapping_mul(magic) >> shift) as usize;
-
-                    match used[index] {
-                        None => used[index] = Some(attacks[i]),
-                        Some(existing) if existing == attacks[i] => {}
-                        _ => continue 'search,
-                    }
-                }
-
-                self.bishop_magics[sq] = magic;
-                self.bishop_offsets[sq] = bishop_offset;
-
-                for i in 0..table_size {
-                    self.bishop_attacks[bishop_offset + i] = used[i].unwrap_or(Bitboard(0));
-                }
-
-                bishop_offset += table_size;
-                println!("Square {}: magic found = 0x{:016X}", sq, magic);
-                break;
-            }
-        }
-
-        debug_assert_eq!(rook_offset, ROOK_MAP_SIZE);
-        debug_assert_eq!(bishop_offset, BISHOP_MAP_SIZE);
     }
 
-    /// Generates a candidate magic number with sparse bits set,
-    /// inspired by Stockfish's sparse_rand.
-    ///
-    /// Sparse numbers reduce collisions in magic bitboards.
-    /// Deterministic if the same seed is used.
+    /// Generates a candidate magic number with sparse bits set, inspired by Stockfish's sparse_rand.
+    /// Sparse numbers reduce collisions in magic bitboards. Deterministic if the same seed is used.
     #[inline(always)]
-    fn sparse_random(seed: &mut SmallRng) -> u64 {
-        let mut r = 0u64;
-        for _ in 0..3 {
-            // Each OR adds a few 1-bits sparsely
-            r |= seed.next_u64() & seed.next_u64() & seed.next_u64();
-        }
-        r
+    fn sparse_random(rng: &mut SmallRng) -> u64 {
+        rng.next_u64() & rng.next_u64() & rng.next_u64()
     }
 
     /// Initializes relevant occupancy masks in the MagicTables struct.
@@ -225,17 +189,22 @@ impl MagicTables {
         let from_rank = (square / 8) as i8;
         let from_file = (square % 8) as i8;
 
+        let rank_edges = (Bitboard::rank_1() | Bitboard::rank_8()) & !Bitboard::square_to_rank(square);
+        let file_edges = (Bitboard::file_A() | Bitboard::file_H()) & !Bitboard::square_to_file(square);
+        let edges = rank_edges | file_edges;
+
         for &(delta_rank, delta_file) in deltas {
             let mut to_rank = from_rank + delta_rank;
             let mut to_file = from_file + delta_file;
 
-            while (1..=6).contains(&to_rank) && (1..=6).contains(&to_file) {
+            while (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
                 mask |= Bitboard::from_square((to_rank * 8 + to_file) as usize);
+
                 to_rank += delta_rank;
                 to_file += delta_file;
             }
         }
-        mask
+        mask & !edges
     }
 
     // Generates all possible rook attacks for all squares and occupancies.
@@ -308,24 +277,20 @@ impl MagicTables {
         attacks
     }
 
-    #[cfg(debug_assertions)]
-    fn print(&self) {
-        println!("=== Rook Magics ===");
+    pub fn print(&self) {
+        println!("=== MAGIC TABLES ===");
+        println!("Square |        Rook Magic        Offset |       Bishop Magic       Offset");
+        println!("--------------------------------------------------------------------------");
+
         for sq in 0..64 {
-            let mask = self.rook_masks[sq];
-            let magic = self.rook_magics[sq];
-            let offset = self.rook_offsets[sq];
-            let num_bits = mask.0.count_ones();
-            println!("Square {:2}: Magic = 0x{:016X}, Offset = {:5}, Mask bits = {:2}, Mask = 0x{:016X}", sq, magic, offset, num_bits, mask.0);
+            println!(
+                "{:>6} | 0x{:016X} {:>8} | 0x{:016X} {:>8}",
+                sq, self.rook_magics[sq], self.rook_offsets[sq], self.bishop_magics[sq], self.bishop_offsets[sq],
+            );
         }
 
-        println!("\n=== Bishop Magics ===");
-        for sq in 0..64 {
-            let mask = self.bishop_masks[sq];
-            let magic = self.bishop_magics[sq];
-            let offset = self.bishop_offsets[sq];
-            let num_bits = mask.0.count_ones();
-            println!("Square {:2}: Magic = 0x{:016X}, Offset = {:5}, Mask bits = {:2}, Mask = 0x{:016X}", sq, magic, offset, num_bits, mask.0);
-        }
+        println!("--------------------------------------------------------------------------");
+        println!("Total rook table size   : {}", self.rook_attacks.len());
+        println!("Total bishop table size : {}", self.bishop_attacks.len());
     }
 }
