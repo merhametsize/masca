@@ -3,8 +3,11 @@
 //! This module contains the implementation of the Board object, representing a Bord configuration along with its
 //! present state and past states, allowing for make/unmake move. The State object is memorized in a stack inside Board.
 
+use std::any::Any;
+
 use crate::bitboard::Bitboard;
-use crate::types::{Color, Piece, PieceType};
+use crate::moves::Move;
+use crate::types::{Color, Piece, PieceType, Square};
 
 const MAX_PLY: usize = 128;
 
@@ -29,7 +32,7 @@ pub struct Board {
 #[derive(Copy, Clone)]
 pub struct State {
     castling: u8,
-    en_passant: Option<usize>,
+    en_passant: Option<Square>,
     halfmove: usize,
     captured: Option<Piece>, //Which piece was captured
     zobrist: Bitboard,
@@ -38,6 +41,18 @@ pub struct State {
 impl Board {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[inline(always)]
+    pub fn make_move(&mut self, m: Move) {
+        let from = m.from_square();
+        let to = m.to_square();
+        let piece = self.mailbox[from as usize].unwrap();
+        let captured = self.mailbox[to as usize];
+
+        self.mailbox[to as usize] = Some(piece);
+        self.mailbox[from as usize] = None;
+        self.pieces[piece.get_type()] ^= Bitboard::from_square(from) | Bitboard::from_square(to);
     }
 
     /// Returns a specific bitboard from `self.pieces`.
@@ -60,16 +75,20 @@ impl Board {
     }
 
     /// Returns which squares are occupied by a piece of any color.
+    #[inline(always)]
     pub fn occupied_squares(&self) -> Bitboard {
         self.colors[Color::White] | self.colors[Color::Black]
     }
 
     /// Returns empty squares.
+    #[inline(always)]
     pub fn empty_squares(&self) -> Bitboard {
         !(self.colors[Color::White] | self.colors[Color::Black])
     }
 
-    pub fn en_passant_square(&self) -> Option<usize> {
+    /// Returns the en-passant capture square, if existing.
+    #[inline(always)]
+    pub fn en_passant_square(&self) -> Option<Square> {
         self.state_stack[self.state_idx].en_passant
     }
 
@@ -105,7 +124,7 @@ impl Board {
 
                     let color = piece.get_color();
                     let ptype = piece.get_type();
-                    let sq_bb = Bitboard::from_square(sq);
+                    let sq_bb = Bitboard::from_square(Square::new(sq as u8));
                     self.pieces[ptype] |= sq_bb;
                     self.colors[color] |= sq_bb;
 
@@ -147,7 +166,7 @@ impl Board {
             if file > 7 || rank > 7 {
                 return Err("Invalid en passant square");
             }
-            Some((rank as usize) * 8 + (file as usize))
+            Some(Square::new((rank as u8) * 8 + (file as u8)))
         };
 
         // ===== Set initial state =====

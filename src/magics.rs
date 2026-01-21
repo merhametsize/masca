@@ -21,6 +21,7 @@ use rand::SeedableRng;
 use rand::rngs::SmallRng;
 
 use crate::bitboard::Bitboard;
+use crate::types::Square;
 
 const ROOK_DELTAS: [(i8, i8); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 const BISHOP_DELTAS: [(i8, i8); 4] = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
@@ -176,7 +177,7 @@ impl MagicTables {
 
     /// Initializes relevant occupancy masks in the MagicTables struct.
     pub fn init_relevant_occupancy_masks(&mut self) {
-        for sq in 0..64 {
+        for sq in Square::ALL {
             self.rook_masks[sq] = Self::relevant_occupancy_mask(sq, &ROOK_DELTAS);
             self.bishop_masks[sq] = Self::relevant_occupancy_mask(sq, &BISHOP_DELTAS);
         }
@@ -184,13 +185,13 @@ impl MagicTables {
 
     // Generic relevant occupancy mask generator for sliding pieces. Excludes edge squares (rank/file 0 or 7).
     #[inline(always)]
-    fn relevant_occupancy_mask(square: usize, deltas: &[(i8, i8)]) -> Bitboard {
+    fn relevant_occupancy_mask(square: Square, deltas: &[(i8, i8)]) -> Bitboard {
         let mut mask = Bitboard(0);
-        let from_rank = (square / 8) as i8;
-        let from_file = (square % 8) as i8;
+        let from_rank = square.rank() as i8;
+        let from_file = square.file() as i8;
 
         let rank_edges = (Bitboard::rank_1() | Bitboard::rank_8()) & !Bitboard::square_to_rank(square);
-        let file_edges = (Bitboard::file_A() | Bitboard::file_H()) & !Bitboard::square_to_file(square);
+        let file_edges = (Bitboard::file_a() | Bitboard::file_h()) & !Bitboard::square_to_file(square);
         let edges = rank_edges | file_edges;
 
         for &(delta_rank, delta_file) in deltas {
@@ -198,7 +199,8 @@ impl MagicTables {
             let mut to_file = from_file + delta_file;
 
             while (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
-                mask |= Bitboard::from_square((to_rank * 8 + to_file) as usize);
+                let sq_index = (to_rank * 8 + to_file) as u8;
+                mask |= Bitboard::from_square(Square::new(sq_index));
 
                 to_rank += delta_rank;
                 to_file += delta_file;
@@ -210,17 +212,17 @@ impl MagicTables {
     // Generates all possible rook attacks for all squares and occupancies.
     // Used in magic number generation to populate the flat attack tables.
     fn generate_all_rook_attacks(&self) -> Vec<Vec<Bitboard>> {
-        (0..64).map(|sq| Self::attacks_for_square(sq, &ROOK_DELTAS)).collect()
+        (0..64).map(|idx| Square::new(idx)).map(|sq| Self::attacks_for_square(sq, &ROOK_DELTAS)).collect()
     }
 
     // Generates all possible bishop attacks for all squares and occupancies.
     // Used in magic number generation to populate the flat attack tables.
     fn generate_all_bishop_attacks(&self) -> Vec<Vec<Bitboard>> {
-        (0..64).map(|sq| Self::attacks_for_square(sq, &BISHOP_DELTAS)).collect()
+        (0..64).map(|idx| Square::new(idx)).map(|sq| Self::attacks_for_square(sq, &BISHOP_DELTAS)).collect()
     }
 
     // Generates all attacks for a specific square and piece (given by deltas)
-    fn attacks_for_square(square: usize, deltas: &[(i8, i8)]) -> Vec<Bitboard> {
+    fn attacks_for_square(square: Square, deltas: &[(i8, i8)]) -> Vec<Bitboard> {
         let mask = Self::relevant_occupancy_mask(square, deltas);
         let occupancies = Self::enumerate_occupancies(mask);
         occupancies.iter().map(|occ| Self::sliding_attack(square, deltas, *occ)).collect()
@@ -233,7 +235,7 @@ impl MagicTables {
 
         // Gathers the indices of all bits that are 1 in the mask
         let mut relevant_square_indices = Vec::with_capacity(num_relevant_bits);
-        for square in 0..64 {
+        for square in Square::ALL {
             if mask & Bitboard::from_square(square) != Bitboard(0) {
                 relevant_square_indices.push(square);
             }
@@ -246,7 +248,7 @@ impl MagicTables {
 
             for (i, &square) in relevant_square_indices.iter().enumerate() {
                 if subset & (1 << i) != 0 {
-                    occ |= 1u64 << square;
+                    occ |= 1u64 << (square as u8);
                 }
             }
             occupancies.push(Bitboard(occ));
@@ -255,17 +257,18 @@ impl MagicTables {
     }
 
     // Computes sliding attacks given a square and an occupancy
-    fn sliding_attack(square: usize, deltas: &[(i8, i8)], occupancy: Bitboard) -> Bitboard {
+    fn sliding_attack(square: Square, deltas: &[(i8, i8)], occupancy: Bitboard) -> Bitboard {
         let mut attacks = Bitboard(0);
-        let from_rank = (square / 8) as i8;
-        let from_file = (square % 8) as i8;
+        let from_rank = square.rank() as i8;
+        let from_file = square.file() as i8;
 
         for &(delta_rank, delta_file) in deltas {
             let mut to_rank = from_rank + delta_rank;
             let mut to_file = from_file + delta_file;
 
             while to_rank >= 0 && to_rank < 8 && to_file >= 0 && to_file < 8 {
-                let sq = (to_rank * 8 + to_file) as usize;
+                let sq_index = (to_rank * 8 + to_file) as u8;
+                let sq = Square::new(sq_index);
                 attacks |= Bitboard::from_square(sq);
                 if occupancy & Bitboard::from_square(sq) != Bitboard(0) {
                     break; // Path is blocked

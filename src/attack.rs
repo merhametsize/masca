@@ -7,9 +7,7 @@
 
 use crate::bitboard::Bitboard;
 use crate::magics::MagicTables;
-use crate::types::Color;
-
-use std::io::Write;
+use crate::types::{Color, Square};
 
 /// Contains the attack look-up tables per piece.
 pub struct AttackTables {
@@ -34,9 +32,9 @@ impl AttackTables {
         let mut pawn_double_push = [[Bitboard(0); 64]; 2]; //Color-dependent
 
         // Initializes the attack table for each square
-        for sq in 0..64 {
-            let from_rank = (sq / 8) as i8;
-            let from_file = (sq % 8) as i8;
+        for sq in Square::ALL {
+            let from_rank = sq.rank() as i8;
+            let from_file = sq.file() as i8;
 
             // ****************** KNIGHT ******************
             for (delta_rank, delta_file) in KNIGHT_DELTAS {
@@ -44,7 +42,8 @@ impl AttackTables {
                 let to_file = from_file + delta_file;
 
                 if (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
-                    knight[sq] |= Bitboard::from_square((to_rank * 8 + to_file) as usize);
+                    let to = Square::new((to_rank * 8 + to_file) as u8);
+                    knight[sq] |= Bitboard::from_square(to);
                 }
             }
 
@@ -54,7 +53,8 @@ impl AttackTables {
                 let to_file = from_file + delta_file;
 
                 if (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
-                    king[sq] |= Bitboard::from_square((to_rank * 8 + to_file) as usize);
+                    let to = Square::new((to_rank * 8 + to_file) as u8);
+                    king[sq] |= Bitboard::from_square(to);
                 }
             }
 
@@ -62,36 +62,36 @@ impl AttackTables {
             //White
             if from_rank < 7 {
                 if from_file > 0 {
-                    pawn_capture[Color::White][sq] |= Bitboard::from_square(sq + 7);
+                    pawn_capture[Color::White][sq] |= Bitboard::from_square(sq.north_west());
                 }
                 if from_file < 7 {
-                    pawn_capture[Color::White][sq] |= Bitboard::from_square(sq + 9);
+                    pawn_capture[Color::White][sq] |= Bitboard::from_square(sq.north_east());
                 }
             }
             //Black
             if from_rank > 0 {
                 if from_file > 0 {
-                    pawn_capture[Color::Black][sq] |= Bitboard::from_square(sq - 9);
+                    pawn_capture[Color::Black][sq] |= Bitboard::from_square(sq.south_west());
                 }
                 if from_file < 7 {
-                    pawn_capture[Color::Black][sq] |= Bitboard::from_square(sq - 7);
+                    pawn_capture[Color::Black][sq] |= Bitboard::from_square(sq.south_east());
                 }
             }
 
             // ****************** PAWN PUSH ******************
             if from_rank < 7 {
-                pawn_push[Color::White][sq] = Bitboard::from_square(sq + 8);
+                pawn_push[Color::White][sq] = Bitboard::from_square(sq.north());
             }
             if from_rank > 0 {
-                pawn_push[Color::Black][sq] = Bitboard::from_square(sq - 8);
+                pawn_push[Color::Black][sq] = Bitboard::from_square(sq.south());
             }
 
             // ****************** DOUBLE PAWN PUSH ******************
             if from_rank == 1 {
-                pawn_double_push[Color::White][sq] = Bitboard::from_square(sq + 16);
+                pawn_double_push[Color::White][sq] = Bitboard::from_square(sq.north().north());
             }
             if from_rank == 6 {
-                pawn_double_push[Color::Black][sq] = Bitboard::from_square(sq - 16);
+                pawn_double_push[Color::Black][sq] = Bitboard::from_square(sq.south().south());
             }
         }
 

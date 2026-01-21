@@ -7,6 +7,8 @@
 use std::fmt;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
 
+use crate::types::Square;
+
 /// Bitboard object defined as a struct with unnamed u64 field.
 #[repr(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -14,8 +16,8 @@ pub struct Bitboard(pub u64);
 
 impl Bitboard {
     #[inline(always)]
-    pub fn from_square(sq: usize) -> Self {
-        Self(1u64 << sq)
+    pub fn from_square(sq: Square) -> Self {
+        Self(1u64 << (sq as u8))
     }
 
     /// Returns rank 1 as a bitboard
@@ -32,27 +34,27 @@ impl Bitboard {
 
     /// Returns file A as a bitboard
     #[inline(always)]
-    pub fn file_A() -> Self {
+    pub fn file_a() -> Self {
         Self(0x0101_0101_0101_0101u64)
     }
 
     /// Returns file H as a bitboard
     #[inline(always)]
-    pub fn file_H() -> Self {
+    pub fn file_h() -> Self {
         Self(0x8080_8080_8080_8080u64)
     }
 
     /// Returns the square's corresponding rank as a bitboard
     #[inline(always)]
-    pub fn square_to_rank(sq: usize) -> Self {
-        let rank_index = sq / 8;
+    pub fn square_to_rank(sq: Square) -> Self {
+        let rank_index = sq.rank();
         Self(0x0000_0000_0000_00FFu64 << (rank_index * 8))
     }
 
     /// Returns the square's corresponding file as a bitboard
     #[inline(always)]
-    pub fn square_to_file(sq: usize) -> Self {
-        let file_index = sq % 8;
+    pub fn square_to_file(sq: Square) -> Self {
+        let file_index = sq.file();
         Self(0x0101_0101_0101_0101u64 << file_index)
     }
 
