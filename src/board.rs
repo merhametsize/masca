@@ -45,14 +45,16 @@ impl Board {
 
     #[inline(always)]
     pub fn make_move(&mut self, m: Move) {
-        let from = m.from_square();
-        let to = m.to_square();
-        let piece = self.mailbox[from as usize].unwrap();
-        let captured = self.mailbox[to as usize];
+        let from = m.from();
+        let to = m.to();
 
-        self.mailbox[to as usize] = Some(piece);
-        self.mailbox[from as usize] = None;
-        self.pieces[piece.get_type()] ^= Bitboard::from_square(from) | Bitboard::from_square(to);
+        debug_assert!(self.mailbox[from].is_some());
+        let piece = self.mailbox[from].unwrap();
+        let captured = self.mailbox[to];
+
+        self.mailbox[to] = Some(piece);
+        self.mailbox[from] = None;
+        self.pieces[piece.get_type()] ^= from.bb() | to.bb();
     }
 
     /// Returns a specific bitboard from `self.pieces`.
@@ -65,13 +67,6 @@ impl Board {
     #[inline(always)]
     pub fn color(&self, color: Color) -> Bitboard {
         self.colors[color as usize]
-    }
-
-    /// Sets board to the starting position.
-    /// # Panics
-    /// Panics if the internal FEN parser fails.
-    pub fn set_startpos(&mut self) {
-        self.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
     }
 
     /// Returns which squares are occupied by a piece of any color.
@@ -90,6 +85,13 @@ impl Board {
     #[inline(always)]
     pub fn en_passant_square(&self) -> Option<Square> {
         self.state_stack[self.state_idx].en_passant
+    }
+
+    /// Sets board to the starting position.
+    /// # Panics
+    /// Panics if the internal FEN parser fails.
+    pub fn set_startpos(&mut self) {
+        self.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
     }
 
     /// Sets board state from a FEN string

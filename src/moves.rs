@@ -56,13 +56,13 @@ impl Move {
 
     /// Returns the origin square.
     #[inline(always)]
-    pub const fn from_square(self) -> Square {
+    pub const fn from(self) -> Square {
         Square::new((self.encoding & 0x3F) as u8)
     }
 
     /// Returns the destination square.
     #[inline(always)]
-    pub const fn to_square(self) -> Square {
+    pub const fn to(self) -> Square {
         Square::new(((self.encoding >> 6) & 0x3F) as u8)
     }
 

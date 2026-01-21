@@ -1,4 +1,6 @@
-use std::ops::{Add, Index, IndexMut, Not, Sub};
+use std::ops::{Index, IndexMut, Not};
+
+use crate::bitboard::Bitboard;
 
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -117,6 +119,12 @@ impl Square {
         let s = self as u8;
         debug_assert!(s >= 8 && (s & 7) != 0); // not rank 1, not file A
         unsafe { std::mem::transmute(s - 9) }
+    }
+
+    /// Turns the square into a bitboard
+    #[inline(always)]
+    pub fn bb(self) -> Bitboard {
+        Bitboard::from_square(self)
     }
 }
 

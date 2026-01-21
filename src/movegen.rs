@@ -10,7 +10,7 @@ use crate::attack::AttackTables;
 use crate::bitboard::Bitboard;
 use crate::board::Board;
 use crate::moves::{Move, MoveType};
-use crate::types::{Color, Piece, PieceType, Square};
+use crate::types::{Color, PieceType, Square};
 
 /// Container for moves generated for a position.
 ///
@@ -212,7 +212,7 @@ pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, attack_tables: &
     let them = if WHITE { board.color(Color::Black) } else { board.color(Color::White) };
     let promotion_rank = if WHITE { Bitboard(0xFF00000000000000u64) } else { Bitboard(0x00000000000000FFu64) };
 
-    let ep_square = if let Some(ep_square) = board.en_passant_square() { Bitboard::from_square(ep_square) } else { Bitboard(0) };
+    let ep_square = if let Some(ep_square) = board.en_passant_square() { ep_square.bb() } else { Bitboard(0) };
 
     while pawns != Bitboard(0) {
         let from = Square::new(pawns.pop_lsb() as u8);
@@ -220,7 +220,7 @@ pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, attack_tables: &
 
         while attacks != Bitboard(0) {
             let to = Square::new(attacks.lsb() as u8);
-            let to_bb = Bitboard::from_square(to);
+            let to_bb = to.bb();
             attacks ^= to_bb; // pop_lsb() would re-execute lsb() internally, xoring directly is faster
 
             if (to_bb & ep_square) != Bitboard(0) {
@@ -263,7 +263,7 @@ pub fn generate_pawn_quiets<const WHITE: bool>(board: &Board, attack_tables: &At
 
         while attacks != Bitboard(0) {
             let to = Square::new(attacks.lsb() as u8);
-            let to_bb = Bitboard::from_square(to);
+            let to_bb = to.bb();
             attacks ^= to_bb; // pop_lsb() would re-execute lsb() internally, xoring directly is faster
 
             if promotion_rank & to_bb != Bitboard(0) {
@@ -276,7 +276,7 @@ pub fn generate_pawn_quiets<const WHITE: bool>(board: &Board, attack_tables: &At
 
                 let mut double_pushes = pawn_double[from] & empty_bb;
                 if double_pushes != Bitboard(0) {
-                    let to_square = double_pushes.lsb();
+                    let to = Square::new(double_pushes.lsb() as u8);
                     moves.push(Move::new_special(from, to, MoveType::DoublePush));
                 }
             }
