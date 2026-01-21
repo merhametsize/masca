@@ -43,14 +43,14 @@ impl Move {
     pub const NULL_MOVE: Move = Move { encoding: 0 };
 
     /// Encodes a "normal" move.
-    pub const fn new_normal(from: u8, to: u8) -> Self {
-        Self { encoding: (from as u16) | ((to as u16) << 6) }
+    pub const fn new_normal(from_square: usize, to_square: usize) -> Self {
+        Self { encoding: (from_square as u16) | ((to_square as u16) << 6) }
     }
 
     /// Encodes a "special" move (double push, castling, capture, en passant, promotion).
-    pub const fn new_special(from: u8, to: u8, movetype: MoveType) -> Self {
+    pub const fn new_special(from_square: usize, to_square: usize, movetype: MoveType) -> Self {
         Self {
-            encoding: (from as u16 | ((to as u16) << 6) | ((movetype as u16) << 12)),
+            encoding: (from_square as u16 | ((to_square as u16) << 6) | ((movetype as u16) << 12)),
         }
     }
 

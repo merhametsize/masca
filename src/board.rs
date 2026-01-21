@@ -4,7 +4,7 @@
 //! present state and past states, allowing for make/unmake move. The State object is memorized in a stack inside Board.
 
 use crate::bitboard::Bitboard;
-use crate::types::{Color, NULL_SQUARE, Piece, PieceType};
+use crate::types::{Color, Piece, PieceType};
 
 const MAX_PLY: usize = 128;
 
@@ -29,7 +29,7 @@ pub struct Board {
 #[derive(Copy, Clone)]
 pub struct State {
     castling: u8,
-    en_passant: u8,
+    en_passant: Option<usize>,
     halfmove: usize,
     captured: Option<Piece>, //Which piece was captured
     zobrist: Bitboard,
@@ -67,6 +67,10 @@ impl Board {
     /// Returns empty squares.
     pub fn empty_squares(&self) -> Bitboard {
         !(self.colors[Color::White] | self.colors[Color::Black])
+    }
+
+    pub fn en_passant_square(&self) -> Option<usize> {
+        self.state_stack[self.state_idx].en_passant
     }
 
     /// Sets board state from a FEN string
@@ -135,7 +139,7 @@ impl Board {
 
         // ===== Parse en passant square =====
         let en_passant = if en_passant_part == "-" {
-            NULL_SQUARE
+            None
         } else {
             let bytes = en_passant_part.as_bytes();
             let file = bytes[0].wrapping_sub(b'a');
@@ -143,7 +147,7 @@ impl Board {
             if file > 7 || rank > 7 {
                 return Err("Invalid en passant square");
             }
-            (rank as u8) * 8 + (file as u8)
+            Some((rank as usize) * 8 + (file as usize))
         };
 
         // ===== Set initial state =====
@@ -199,7 +203,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             castling: 0,
-            en_passant: 0,
+            en_passant: None,
             halfmove: 0,
             captured: Option::None,
             zobrist: Bitboard(0),

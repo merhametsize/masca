@@ -5,7 +5,7 @@
 //! the engine, such as masks, squares, attacks and more.
 
 use std::fmt;
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, Not};
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
 
 /// Bitboard object defined as a struct with unnamed u64 field.
 #[repr(transparent)]
@@ -54,6 +54,12 @@ impl Bitboard {
     pub fn square_to_file(sq: usize) -> Self {
         let file_index = sq % 8;
         Self(0x0101_0101_0101_0101u64 << file_index)
+    }
+
+    /// Returns the LSB from the bitboard
+    #[inline(always)]
+    pub fn lsb(&mut self) -> usize {
+        self.0.trailing_zeros() as usize
     }
 
     /// Pops the LSB from the bitboard, in-place
@@ -121,23 +127,16 @@ impl BitAndAssign for Bitboard {
     }
 }
 
+impl BitXorAssign for Bitboard {
+    fn bitxor_assign(&mut self, rhs: Self) {
+        self.0 ^= rhs.0;
+    }
+}
+
 impl Not for Bitboard {
     type Output = Self;
 
     fn not(self) -> Self::Output {
         Self(!self.0)
-    }
-}
-
-impl Iterator for Bitboard {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.0 == 0 {
-            None
-        } else {
-            let lsb = self.pop_lsb();
-            Some(lsb)
-        }
     }
 }
