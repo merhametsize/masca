@@ -63,12 +63,9 @@ pub struct MagicTables {
 
 impl MagicTables {
     pub fn new() -> Self {
-        let mut rook_masks = [Bitboard(0); 64];
-        let mut bishop_masks = [Bitboard(0); 64];
-
         Self {
-            rook_masks,
-            bishop_masks,
+            rook_masks: [Bitboard(0); 64],
+            bishop_masks: [Bitboard(0); 64],
             rook_magics: [0; 64],
             bishop_magics: [0; 64],
             rook_attacks: [Bitboard(0); ROOK_MAP_SIZE],
@@ -200,7 +197,7 @@ impl MagicTables {
 
             while (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
                 let sq_index = (to_rank * 8 + to_file) as u8;
-                mask |= Bitboard::from_square(Square::new(sq_index));
+                mask |= Square::new(sq_index).bb();
 
                 to_rank += delta_rank;
                 to_file += delta_file;
@@ -236,7 +233,7 @@ impl MagicTables {
         // Gathers the indices of all bits that are 1 in the mask
         let mut relevant_square_indices = Vec::with_capacity(num_relevant_bits);
         for square in Square::ALL {
-            if mask & Bitboard::from_square(square) != Bitboard(0) {
+            if mask & square.bb() != Bitboard(0) {
                 relevant_square_indices.push(square);
             }
         }
@@ -269,8 +266,8 @@ impl MagicTables {
             while to_rank >= 0 && to_rank < 8 && to_file >= 0 && to_file < 8 {
                 let sq_index = (to_rank * 8 + to_file) as u8;
                 let sq = Square::new(sq_index);
-                attacks |= Bitboard::from_square(sq);
-                if occupancy & Bitboard::from_square(sq) != Bitboard(0) {
+                attacks |= sq.bb();
+                if occupancy & sq.bb() != Bitboard(0) {
                     break; // Path is blocked
                 }
                 to_rank += delta_rank;

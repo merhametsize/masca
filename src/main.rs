@@ -21,7 +21,7 @@ mod types;
 
 use board::Board;
 
-use crate::movegen::{Bishop, Knight, MoveList, generate_moves, generate_pawn_captures, generate_pawn_quiets};
+use crate::movegen::{Alfè, Caval, MoveList, generate_moves, generate_pawn_captures, generate_pawn_quiets};
 
 fn main() {
     let mut board = Board::new();
@@ -32,15 +32,15 @@ fn main() {
     let mut moves;
 
     moves = MoveList::new();
-    generate_moves::<Knight, true, false>(&board, &attack_tables, &mut moves);
+    generate_moves::<Caval, true, false>(&board, &attack_tables, &mut moves);
     println!("White knight quiet moves: {}", moves.count());
 
     moves = MoveList::new();
-    generate_moves::<Knight, true, true>(&board, &attack_tables, &mut moves);
+    generate_moves::<Caval, true, true>(&board, &attack_tables, &mut moves);
     println!("White knight captures: {}", moves.count());
 
     moves = MoveList::new();
-    generate_moves::<Bishop, true, false>(&board, &attack_tables, &mut moves);
+    generate_moves::<Alfè, true, false>(&board, &attack_tables, &mut moves);
     println!("White bishop quiet moves: {}", moves.count());
 
     moves = MoveList::new();

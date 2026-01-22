@@ -47,9 +47,9 @@ pub trait Attacker {
 }
 
 /// Knight move generation.
-pub struct Knight;
-impl Attacker for Knight {
-    const TYPE: PieceType = PieceType::Knight;
+pub struct Caval;
+impl Attacker for Caval {
+    const TYPE: PieceType = PieceType::Caval;
 
     #[inline(always)]
     fn get_attacks(from: Square, _: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -58,9 +58,9 @@ impl Attacker for Knight {
 }
 
 /// King move generation.
-pub struct King;
-impl Attacker for King {
-    const TYPE: PieceType = PieceType::King;
+pub struct Re;
+impl Attacker for Re {
+    const TYPE: PieceType = PieceType::Re;
 
     #[inline(always)]
     fn get_attacks(from: Square, _: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -72,9 +72,9 @@ impl Attacker for King {
 ///
 /// Occupancy of the board is masked to relevant squares, multiplied by the magic number, and indexed into
 /// a flat attack table. `(64 - mask.popcount())` is computed on-the-fly for maximum performance.
-pub struct Rook;
-impl Attacker for Rook {
-    const TYPE: PieceType = PieceType::Rook;
+pub struct Tor;
+impl Attacker for Tor {
+    const TYPE: PieceType = PieceType::Tor;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -100,9 +100,9 @@ impl Attacker for Rook {
 ///
 /// Occupancy of the board is masked to relevant squares, multiplied by the magic number, and indexed into
 /// a flat attack table. `(64 - mask.popcount())` is computed on-the-fly for maximum performance.
-pub struct Bishop;
-impl Attacker for Bishop {
-    const TYPE: PieceType = PieceType::Bishop;
+pub struct Alfè;
+impl Attacker for Alfè {
+    const TYPE: PieceType = PieceType::Alfè;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -119,44 +119,44 @@ impl Attacker for Bishop {
 }
 
 /// Queen move generation as a union of rook and bishop attacks.
-pub struct Queen;
-impl Attacker for Queen {
-    const TYPE: PieceType = PieceType::Queen;
+pub struct Argina;
+impl Attacker for Argina {
+    const TYPE: PieceType = PieceType::Argina;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board, attack_tables: &AttackTables) -> Bitboard {
-        Rook::get_attacks(from, &board, attack_tables) | Bishop::get_attacks(from, &board, attack_tables)
+        Tor::get_attacks(from, &board, attack_tables) | Alfè::get_attacks(from, &board, attack_tables)
     }
 }
 
 #[inline(always)]
 pub fn generate_all_moves(board: &Board, attack_tables: &AttackTables, moves: &mut MoveList) {
     // White
-    generate_moves::<Knight, true, false>(board, attack_tables, moves);
-    generate_moves::<Knight, true, true>(board, attack_tables, moves);
-    generate_moves::<King, true, false>(board, attack_tables, moves);
-    generate_moves::<King, true, true>(board, attack_tables, moves);
-    generate_moves::<Bishop, true, false>(board, attack_tables, moves);
-    generate_moves::<Bishop, true, true>(board, attack_tables, moves);
-    generate_moves::<Rook, true, false>(board, attack_tables, moves);
-    generate_moves::<Rook, true, true>(board, attack_tables, moves);
-    generate_moves::<Queen, true, false>(board, attack_tables, moves);
-    generate_moves::<Queen, true, true>(board, attack_tables, moves);
+    generate_moves::<Caval, true, false>(board, attack_tables, moves);
+    generate_moves::<Caval, true, true>(board, attack_tables, moves);
+    generate_moves::<Re, true, false>(board, attack_tables, moves);
+    generate_moves::<Re, true, true>(board, attack_tables, moves);
+    generate_moves::<Alfè, true, false>(board, attack_tables, moves);
+    generate_moves::<Alfè, true, true>(board, attack_tables, moves);
+    generate_moves::<Tor, true, false>(board, attack_tables, moves);
+    generate_moves::<Tor, true, true>(board, attack_tables, moves);
+    generate_moves::<Argina, true, false>(board, attack_tables, moves);
+    generate_moves::<Argina, true, true>(board, attack_tables, moves);
 
     generate_pawn_quiets::<true>(board, attack_tables, moves);
     generate_pawn_captures::<true>(board, attack_tables, moves);
 
     // Black
-    generate_moves::<Knight, false, false>(board, attack_tables, moves);
-    generate_moves::<Knight, false, true>(board, attack_tables, moves);
-    generate_moves::<King, false, false>(board, attack_tables, moves);
-    generate_moves::<King, false, true>(board, attack_tables, moves);
-    generate_moves::<Bishop, false, false>(board, attack_tables, moves);
-    generate_moves::<Bishop, false, true>(board, attack_tables, moves);
-    generate_moves::<Rook, false, false>(board, attack_tables, moves);
-    generate_moves::<Rook, false, true>(board, attack_tables, moves);
-    generate_moves::<Queen, false, false>(board, attack_tables, moves);
-    generate_moves::<Queen, false, true>(board, attack_tables, moves);
+    generate_moves::<Caval, false, false>(board, attack_tables, moves);
+    generate_moves::<Caval, false, true>(board, attack_tables, moves);
+    generate_moves::<Re, false, false>(board, attack_tables, moves);
+    generate_moves::<Re, false, true>(board, attack_tables, moves);
+    generate_moves::<Alfè, false, false>(board, attack_tables, moves);
+    generate_moves::<Alfè, false, true>(board, attack_tables, moves);
+    generate_moves::<Tor, false, false>(board, attack_tables, moves);
+    generate_moves::<Tor, false, true>(board, attack_tables, moves);
+    generate_moves::<Argina, false, false>(board, attack_tables, moves);
+    generate_moves::<Argina, false, true>(board, attack_tables, moves);
 
     generate_pawn_quiets::<false>(board, attack_tables, moves);
     generate_pawn_captures::<false>(board, attack_tables, moves);
@@ -207,7 +207,7 @@ pub fn generate_moves<P: Attacker, const WHITE: bool, const CAPTURE: bool>(board
 #[inline(always)]
 pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, attack_tables: &AttackTables, moves: &mut MoveList) {
     let our_color = if WHITE { Color::White } else { Color::Black };
-    let mut pawns = board.piece(PieceType::Pawn) & board.color(our_color);
+    let mut pawns = board.piece(PieceType::Pion) & board.color(our_color);
 
     let them = if WHITE { board.color(Color::Black) } else { board.color(Color::White) };
     let promotion_rank = if WHITE { Bitboard(0xFF00000000000000u64) } else { Bitboard(0x00000000000000FFu64) };
@@ -249,7 +249,7 @@ pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, attack_tables: &
 #[inline(always)]
 pub fn generate_pawn_quiets<const WHITE: bool>(board: &Board, attack_tables: &AttackTables, moves: &mut MoveList) {
     let our_color = if WHITE { Color::White } else { Color::Black };
-    let mut pawns = board.piece(PieceType::Pawn) & board.color(our_color);
+    let mut pawns = board.piece(PieceType::Pion) & board.color(our_color);
 
     let pawn_pushes = &attack_tables.pawn_push[our_color];
     let pawn_double = &attack_tables.pawn_double_push[our_color];

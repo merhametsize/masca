@@ -15,11 +15,6 @@ use crate::types::Square;
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
-    #[inline(always)]
-    pub fn from_square(sq: Square) -> Self {
-        Self(1u64 << (sq as u8))
-    }
-
     /// Returns rank 1 as a bitboard
     #[inline(always)]
     pub fn rank_1() -> Self {

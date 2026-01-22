@@ -3,8 +3,6 @@
 //! This module contains the implementation of the Board object, representing a Bord configuration along with its
 //! present state and past states, allowing for make/unmake move. The State object is memorized in a stack inside Board.
 
-use std::any::Any;
-
 use crate::bitboard::Bitboard;
 use crate::moves::Move;
 use crate::types::{Color, Piece, PieceType, Square};
@@ -49,12 +47,17 @@ impl Board {
         let to = m.to();
 
         debug_assert!(self.mailbox[from].is_some());
-        let piece = self.mailbox[from].unwrap();
+        let piece = unsafe { self.mailbox[from].unwrap_unchecked() };
         let captured = self.mailbox[to];
 
         self.mailbox[to] = Some(piece);
         self.mailbox[from] = None;
         self.pieces[piece.get_type()] ^= from.bb() | to.bb();
+        self.colors[self.side_to_move] ^= from.bb() | to.bb();
+
+        let old_state = self.state_stack[self.state_idx];
+        let new_state = self.state_stack[self.state_idx + 1];
+        self.state_idx += 1;
     }
 
     /// Returns a specific bitboard from `self.pieces`.
@@ -126,7 +129,7 @@ impl Board {
 
                     let color = piece.get_color();
                     let ptype = piece.get_type();
-                    let sq_bb = Bitboard::from_square(Square::new(sq as u8));
+                    let sq_bb = Square::new(sq as u8).bb();
                     self.pieces[ptype] |= sq_bb;
                     self.colors[color] |= sq_bb;
 
@@ -185,7 +188,7 @@ impl Board {
     }
 
     /// Prints the board to console terminal for debug.
-    // #[cfg(debug_assertions)]
+    #[cfg(debug_assertions)]
     pub fn print(&self) {
         println!("Side to move: {:?}", self.side_to_move);
         println!("  +------------------------+");

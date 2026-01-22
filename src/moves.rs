@@ -119,10 +119,10 @@ impl Move {
     pub const fn get_promotion_piece(self) -> PieceType {
         debug_assert!(self.is_promotion());
         match (self.encoding >> 12) & 0b11 {
-            0 => PieceType::Knight,
-            1 => PieceType::Bishop,
-            2 => PieceType::Rook,
-            3 => PieceType::Queen,
+            0 => PieceType::Caval,
+            1 => PieceType::Alfè,
+            2 => PieceType::Tor,
+            3 => PieceType::Argina,
             _ => unreachable!(),
         }
     }

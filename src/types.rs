@@ -124,7 +124,7 @@ impl Square {
     /// Turns the square into a bitboard
     #[inline(always)]
     pub fn bb(self) -> Bitboard {
-        Bitboard::from_square(self)
+        Bitboard(1u64 << (self as u8))
     }
 }
 
@@ -146,12 +146,12 @@ impl<T> IndexMut<Square> for [T] {
 #[repr(u8)]
 #[derive(Copy, Clone)]
 pub enum PieceType {
-    Pawn = 0,
-    Knight,
-    Bishop,
-    Rook,
-    Queen,
-    King,
+    Pion = 0, // Pawn
+    Caval,    // 'Horse' in Piedmontese - Knight
+    Alfè,     // 'Standard bearer' in Piedmontese - Bishop
+    Tor,      // 'Tower' in Piedmontese - Rook
+    Argina,   // Queen
+    Re,       // King
 }
 
 impl PieceType {
@@ -175,19 +175,21 @@ impl<T> IndexMut<PieceType> for [T] {
 #[repr(u8)]
 #[derive(Copy, Clone)]
 pub enum Piece {
-    WhitePawn = 0,
-    WhiteKnight,
-    WhiteBishop,
-    WhiteRook,
-    WhiteQueen,
-    WhiteKing,
+    //White
+    PionBianch = 0,
+    CavalBianch,
+    AlfèBianch,
+    TorBianca,
+    ArginaBianca,
+    ReBianch,
 
-    BlackPawn,
-    BlackKnight,
-    BlackBishop,
-    BlackRook,
-    BlackQueen,
-    BlackKing,
+    //Black
+    PionNeir,
+    CavalNeir,
+    AlfèNeir,
+    TorNeira,
+    ArginaNeira,
+    ReNeir,
 }
 
 impl Piece {
@@ -196,14 +198,15 @@ impl Piece {
     }
 
     /// Makes the enum self-aware, returns the piece-type.
+    #[inline(always)]
     pub const fn get_type(self) -> PieceType {
         match (self as u8) >> 1 {
-            0 => PieceType::Pawn,
-            1 => PieceType::Knight,
-            2 => PieceType::Bishop,
-            3 => PieceType::Rook,
-            4 => PieceType::Queen,
-            5 => PieceType::King,
+            0 => PieceType::Pion,
+            1 => PieceType::Caval,
+            2 => PieceType::Alfè,
+            3 => PieceType::Tor,
+            4 => PieceType::Argina,
+            5 => PieceType::Re,
             _ => unreachable!(), // optional safety
         }
     }
@@ -212,18 +215,18 @@ impl Piece {
     #[rustfmt::skip]
     pub const fn to_char(self) -> char {
         match self {
-            Piece::WhitePawn   => 'P',
-            Piece::WhiteKnight => 'N',
-            Piece::WhiteBishop => 'B',
-            Piece::WhiteRook   => 'R',
-            Piece::WhiteQueen  => 'Q',
-            Piece::WhiteKing   => 'K',
-            Piece::BlackPawn   => 'p',
-            Piece::BlackKnight => 'n',
-            Piece::BlackBishop => 'b',
-            Piece::BlackRook   => 'r',
-            Piece::BlackQueen  => 'q',
-            Piece::BlackKing   => 'k',
+            Piece::PionBianch   => 'P',
+            Piece::CavalBianch => 'N',
+            Piece::AlfèBianch => 'B',
+            Piece::TorBianca   => 'R',
+            Piece::ArginaBianca  => 'Q',
+            Piece::ReBianch   => 'K',
+            Piece::PionNeir   => 'p',
+            Piece::CavalNeir => 'n',
+            Piece::AlfèNeir => 'b',
+            Piece::TorNeira   => 'r',
+            Piece::ArginaNeira  => 'q',
+            Piece::ReNeir   => 'k',
         }
     }
 
@@ -231,18 +234,18 @@ impl Piece {
     #[rustfmt::skip]
     pub const fn from_char(ch: char) -> Self {
         match ch {
-            'P' => Piece::WhitePawn,
-            'N' => Piece::WhiteKnight,
-            'B' => Piece::WhiteBishop,
-            'R' => Piece::WhiteRook,
-            'Q' => Piece::WhiteQueen,
-            'K' => Piece::WhiteKing,
-            'p' => Piece::BlackPawn,
-            'n' => Piece::BlackKnight,
-            'b' => Piece::BlackBishop,
-            'r' => Piece::BlackRook,
-            'q' => Piece::BlackQueen,
-            'k' => Piece::BlackKing,
+            'P' => Piece::PionBianch,
+            'N' => Piece::CavalBianch,
+            'B' => Piece::AlfèBianch,
+            'R' => Piece::TorBianca,
+            'Q' => Piece::ArginaBianca,
+            'K' => Piece::ReBianch,
+            'p' => Piece::PionNeir,
+            'n' => Piece::CavalNeir,
+            'b' => Piece::AlfèNeir,
+            'r' => Piece::TorNeira,
+            'q' => Piece::ArginaNeira,
+            'k' => Piece::ReNeir,
             _   => unreachable!(),
         }
     }

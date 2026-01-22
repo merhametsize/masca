@@ -43,7 +43,7 @@ impl AttackTables {
 
                 if (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
                     let to = Square::new((to_rank * 8 + to_file) as u8);
-                    knight[sq] |= Bitboard::from_square(to);
+                    knight[sq] |= to.bb();
                 }
             }
 
@@ -54,7 +54,7 @@ impl AttackTables {
 
                 if (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
                     let to = Square::new((to_rank * 8 + to_file) as u8);
-                    king[sq] |= Bitboard::from_square(to);
+                    king[sq] |= to.bb();
                 }
             }
 
@@ -62,36 +62,36 @@ impl AttackTables {
             //White
             if from_rank < 7 {
                 if from_file > 0 {
-                    pawn_capture[Color::White][sq] |= Bitboard::from_square(sq.north_west());
+                    pawn_capture[Color::White][sq] |= sq.north_west().bb();
                 }
                 if from_file < 7 {
-                    pawn_capture[Color::White][sq] |= Bitboard::from_square(sq.north_east());
+                    pawn_capture[Color::White][sq] |= sq.north_east().bb();
                 }
             }
             //Black
             if from_rank > 0 {
                 if from_file > 0 {
-                    pawn_capture[Color::Black][sq] |= Bitboard::from_square(sq.south_west());
+                    pawn_capture[Color::Black][sq] |= sq.south_west().bb();
                 }
                 if from_file < 7 {
-                    pawn_capture[Color::Black][sq] |= Bitboard::from_square(sq.south_east());
+                    pawn_capture[Color::Black][sq] |= sq.south_east().bb();
                 }
             }
 
             // ****************** PAWN PUSH ******************
             if from_rank < 7 {
-                pawn_push[Color::White][sq] = Bitboard::from_square(sq.north());
+                pawn_push[Color::White][sq] = sq.north().bb();
             }
             if from_rank > 0 {
-                pawn_push[Color::Black][sq] = Bitboard::from_square(sq.south());
+                pawn_push[Color::Black][sq] = sq.south().bb();
             }
 
             // ****************** DOUBLE PAWN PUSH ******************
             if from_rank == 1 {
-                pawn_double_push[Color::White][sq] = Bitboard::from_square(sq.north().north());
+                pawn_double_push[Color::White][sq] = sq.north().north().bb();
             }
             if from_rank == 6 {
-                pawn_double_push[Color::Black][sq] = Bitboard::from_square(sq.south().south());
+                pawn_double_push[Color::Black][sq] = sq.south().south().bb();
             }
         }
 
