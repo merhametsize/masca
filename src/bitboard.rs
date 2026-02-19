@@ -55,7 +55,7 @@ impl Bitboard {
 
     /// Returns the LSB from the bitboard
     #[inline(always)]
-    pub fn lsb(&mut self) -> usize {
+    pub fn lsb(&self) -> usize {
         self.0.trailing_zeros() as usize
     }
 

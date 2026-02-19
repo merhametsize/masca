@@ -3,6 +3,7 @@
 //! This module contains the implementation of the Board object, representing a Bord configuration along with its
 //! present state and past states, allowing for make/unmake move. The State object is memorized in a stack inside Board.
 
+use crate::attack::AttackTables;
 use crate::bitboard::Bitboard;
 use crate::moves::{Move, MoveKind};
 use crate::types::{Color, Piece, PieceType, Square};
@@ -41,6 +42,9 @@ impl Board {
         Self::default()
     }
 
+    /// Makes a pseudo-legal move incrementally.
+    ///
+    /// Does NOT check legality (king safety). Must be paired with `unmake_move`.
     pub fn make_move(&mut self, m: Move) {
         let (from, to) = (m.from(), m.to());
         let (us, them) = (self.side_to_move, !self.side_to_move);
@@ -153,6 +157,9 @@ impl Board {
         self.side_to_move = !self.side_to_move;
     }
 
+    /// Reverts the last move incrementally.
+    ///
+    /// After `make_move(m)` + `unmake_move(m)`: board state must be bit-identical.
     pub fn unmake_move(&mut self, m: Move) {
         let (from, to) = (m.from(), m.to());
 
@@ -200,6 +207,68 @@ impl Board {
             self.pieces[PieceType::Rook] ^= rook_from.bb() | rook_to.bb();
             self.colors[us] ^= rook_from.bb() | rook_to.bb();
         }
+    }
+
+    /// Returns true if `color`'s king is in check.
+    ///
+    /// Locates king square and calls `is_square_attacked`.
+    pub fn king_in_check(&self, color: Color, attack_tables: &AttackTables) -> bool {
+        let king_bb = self.pieces[PieceType::King] & self.colors[color];
+        let king_sq = Square::new(king_bb.lsb() as u8);
+        self.is_square_attacked(king_sq, !color, attack_tables)
+    }
+
+    /// Returns true if square `sq` is attacked by color `by`.
+    ///
+    /// Uses reverse attack lookup. Constant time. No iteration over all pieces.
+    pub fn is_square_attacked(&self, sq: Square, by: Color, attack_tables: &AttackTables) -> bool {
+        let occupancy = self.occupied_squares();
+        let their_pieces = self.colors[by];
+
+        // Pawn attacks
+        if attack_tables.pawn_capture[!by][sq] & (self.pieces[PieceType::Pawn] & their_pieces) != Bitboard(0) {
+            return true;
+        }
+
+        // Knight attacks
+        if attack_tables.knight[sq] & (self.piece(PieceType::Knight) & their_pieces) != Bitboard(0) {
+            return true;
+        }
+
+        // King attacks
+        if attack_tables.king[sq] & (self.piece(PieceType::King) & their_pieces) != Bitboard(0) {
+            return true;
+        }
+
+        // Bishop/Queen (diagonals)
+        {
+            let mt = &attack_tables.magic_tables;
+            let mask = mt.bishop_masks[sq];
+            let relevant = occupancy & mask;
+            let magic = mt.bishop_magics[sq];
+            let idx = ((relevant.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
+            let attacks = mt.bishop_attacks[mt.bishop_offsets[sq] + idx];
+
+            if attacks & ((self.piece(PieceType::Bishop) | self.piece(PieceType::Queen)) & their_pieces) != Bitboard(0) {
+                return true;
+            }
+        }
+
+        // Rook/Queen (orthogonal)
+        {
+            let mt = &attack_tables.magic_tables;
+            let mask = mt.rook_masks[sq];
+            let relevant = occupancy & mask;
+            let magic = mt.rook_magics[sq];
+            let idx = ((relevant.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
+            let attacks = mt.rook_attacks[mt.rook_offsets[sq] + idx];
+
+            if attacks & ((self.piece(PieceType::Rook) | self.piece(PieceType::Queen)) & their_pieces) != Bitboard(0) {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Returns a specific bitboard from `self.pieces`.
