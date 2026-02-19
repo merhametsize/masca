@@ -4,7 +4,7 @@
 //! present state and past states, allowing for make/unmake move. The State object is memorized in a stack inside Board.
 
 use crate::bitboard::Bitboard;
-use crate::moves::Move;
+use crate::moves::{Move, MoveKind};
 use crate::types::{Color, Piece, PieceType, Square};
 
 const MAX_PLY: usize = 128;
@@ -41,29 +41,178 @@ impl Board {
         Self::default()
     }
 
-    #[inline(always)]
     pub fn make_move(&mut self, m: Move) {
-        let from = m.from();
-        let to = m.to();
+        let (from, to) = (m.from(), m.to());
+        let (us, them) = (self.side_to_move, !self.side_to_move);
 
-        debug_assert!(self.mailbox[from].is_some());
-        let piece = unsafe { self.mailbox[from].unwrap_unchecked() };
-        let captured = self.mailbox[to];
+        // 1 - Prepare state change variables
+        let mut newstate_en_passant = None;
+        let mut newstate_captured = None;
+        let mut newstate_halfmove = 0;
+        let mut newstate_castling = self.state_stack[self.state_idx].castling;
 
-        self.mailbox[to] = Some(piece);
+        // 2 - Remove from origin
+        debug_assert!(self.mailbox[from].is_some()); // There must be a piece in the origin square
+        let moved_piece = self.piece_on_unchecked(from);
+        let moved_type = moved_piece.get_type();
         self.mailbox[from] = None;
-        self.pieces[piece.get_type()] ^= from.bb() | to.bb();
-        self.colors[self.side_to_move] ^= from.bb() | to.bb();
+        self.pieces[moved_type] ^= from.bb();
+        self.colors[us] ^= from.bb();
 
+        // 3 - Handle capture
+        if m.is_enpassant() {
+            let captured_sq = if us == Color::White { to.south() } else { to.north() };
+            let captured_piece = self.piece_on_unchecked(captured_sq);
+
+            self.mailbox[captured_sq] = None;
+            self.pieces[PieceType::Pawn] ^= captured_sq.bb();
+            self.colors[them] ^= captured_sq.bb();
+
+            newstate_captured = Some(captured_piece);
+        } else if m.is_capture() {
+            debug_assert!(self.mailbox[to].is_some()); // There must be a piece in the destination square
+            let captured_piece = self.piece_on_unchecked(to);
+            self.pieces[captured_piece.get_type()] ^= to.bb();
+            self.colors[them] ^= to.bb();
+
+            newstate_captured = Some(captured_piece);
+        }
+        if moved_type == PieceType::Pawn || m.is_capture() || m.is_enpassant() {
+            newstate_halfmove = 0; // Halfmove reset
+        } else {
+            newstate_halfmove = self.state_stack[self.state_idx].halfmove + 1;
+        }
+
+        // 4 - Handle destination square
+        if m.is_promotion() {
+            let promoted_type = m.promotion_piece();
+            let promoted_piece = Piece::new(us, promoted_type);
+
+            self.mailbox[to] = Some(promoted_piece);
+            self.pieces[promoted_type] ^= to.bb();
+        } else {
+            self.mailbox[to] = Some(moved_piece); //Normal piece move
+            self.pieces[moved_type] ^= to.bb();
+        }
+        self.colors[us] ^= to.bb();
+
+        // 5 - Castling
+        if m.is_castling() {
+            let (rook_from, rook_to) = match to {
+                Square::G1 => (Square::H1, Square::F1),
+                Square::C1 => (Square::A1, Square::D1),
+                Square::G8 => (Square::H8, Square::F8),
+                Square::C8 => (Square::A8, Square::D8),
+                _ => unreachable!(),
+            };
+
+            let rook = self.piece_on_unchecked(rook_from);
+            debug_assert!(rook.get_type() == PieceType::Rook);
+
+            self.mailbox[rook_from] = None;
+            self.mailbox[rook_to] = Some(rook);
+
+            self.pieces[PieceType::Rook] ^= rook_from.bb() | rook_to.bb();
+            self.colors[us] ^= rook_from.bb() | rook_to.bb();
+        }
+
+        // 6 - Update castling rights (branchless)
+        const WK: u8 = 0b0001;
+        const WQ: u8 = 0b0010;
+        const BK: u8 = 0b0100;
+        const BQ: u8 = 0b1000;
+        let mut castling_mask: u8 = 0xFF; // Default: no change
+        castling_mask &= !((from == Square::E1) as u8 * (WK | WQ)); // White king move
+        castling_mask &= !((from == Square::E8) as u8 * (BK | BQ)); // Black king move
+        castling_mask &= !((from == Square::H1 || to == Square::H1) as u8 * WK); // Rook move or capture
+        castling_mask &= !((from == Square::A1 || to == Square::A1) as u8 * WQ);
+        castling_mask &= !((from == Square::H8 || to == Square::H8) as u8 * BK);
+        castling_mask &= !((from == Square::A8 || to == Square::A8) as u8 * BQ);
+        newstate_castling &= castling_mask;
+
+        // 7 - Handle double push
+        if m.is_double_push() {
+            let ep_sq = if us == Color::White { to.south() } else { to.north() };
+            newstate_en_passant = Some(ep_sq);
+        }
+
+        // 8 - Update zobrist
+        //TODO
+
+        // 9 - Push new state
         let old_state = self.state_stack[self.state_idx];
-        let new_state = self.state_stack[self.state_idx + 1];
         self.state_idx += 1;
+        let new_state = &mut self.state_stack[self.state_idx];
+        *new_state = old_state; // Struct assign
+        new_state.en_passant = newstate_en_passant;
+        new_state.captured = newstate_captured;
+        new_state.castling = newstate_castling;
+        new_state.halfmove = newstate_halfmove;
+
+        // 10 - Flip side
+        self.side_to_move = !self.side_to_move;
+    }
+
+    pub fn unmake_move(&mut self, m: Move) {
+        let (from, to) = (m.from(), m.to());
+
+        // 1 - Flip side
+        self.side_to_move = !self.side_to_move;
+        let (us, them) = (self.side_to_move, !self.side_to_move);
+
+        // 2 - Pop state
+        self.state_idx -= 1;
+        let previous_state = self.state_stack[self.state_idx];
+
+        // 3 - Undo destination square
+        let moved_type = if m.is_promotion() { PieceType::Pawn } else { self.piece_on_unchecked(to).get_type() };
+        self.pieces[moved_type] ^= to.bb();
+        self.colors[us] ^= to.bb();
+
+        // 4 - Restore captured piece
+        if let Some(captured) = previous_state.captured {
+            let captured_sq = if m.is_enpassant() { if us == Color::White { to.south() } else { to.north() } } else { to };
+            self.mailbox[captured_sq] = Some(captured);
+            self.pieces[captured.get_type()] ^= captured_sq.bb();
+            self.colors[them] ^= captured_sq.bb();
+        } else {
+            self.mailbox[to] = None;
+        } // Empty square if no capture
+
+        // 5 - Restore origin square
+        let moved_piece = Piece::new(us, moved_type);
+        self.mailbox[from] = Some(moved_piece);
+        self.pieces[moved_type] ^= from.bb();
+        self.colors[us] ^= from.bb();
+
+        // 6 - Undo castling
+        if m.is_castling() {
+            let (rook_from, rook_to) = match to {
+                Square::G1 => (Square::H1, Square::F1),
+                Square::C1 => (Square::A1, Square::D1),
+                Square::G8 => (Square::H8, Square::F8),
+                Square::C8 => (Square::A8, Square::D8),
+                _ => unreachable!(),
+            };
+            let rook = self.piece_on_unchecked(rook_to);
+            self.mailbox[rook_to] = None;
+            self.mailbox[rook_from] = Some(rook);
+            self.pieces[PieceType::Rook] ^= rook_from.bb() | rook_to.bb();
+            self.colors[us] ^= rook_from.bb() | rook_to.bb();
+        }
     }
 
     /// Returns a specific bitboard from `self.pieces`.
     #[inline(always)]
     pub fn piece(&self, piece_type: PieceType) -> Bitboard {
         self.pieces[piece_type as usize]
+    }
+
+    /// Returns the piece on a specific square. Does not check if a piece is actually present.
+    #[inline(always)]
+    pub fn piece_on_unchecked(&self, sq: Square) -> Piece {
+        debug_assert!(!self.mailbox[sq].is_none()); // There must be a piece in the square
+        unsafe { self.mailbox[sq].unwrap_unchecked() }
     }
 
     /// Returns a specific bitboard from `self.colors`.

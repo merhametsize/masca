@@ -9,7 +9,7 @@
 use crate::attack::AttackTables;
 use crate::bitboard::Bitboard;
 use crate::board::Board;
-use crate::moves::{Move, MoveType};
+use crate::moves::{Move, MoveKind};
 use crate::types::{Color, PieceType, Square};
 
 /// Container for moves generated for a position.
@@ -49,7 +49,7 @@ pub trait Attacker {
 /// Knight move generation.
 pub struct Caval;
 impl Attacker for Caval {
-    const TYPE: PieceType = PieceType::Caval;
+    const TYPE: PieceType = PieceType::Knight;
 
     #[inline(always)]
     fn get_attacks(from: Square, _: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -60,7 +60,7 @@ impl Attacker for Caval {
 /// King move generation.
 pub struct Re;
 impl Attacker for Re {
-    const TYPE: PieceType = PieceType::Re;
+    const TYPE: PieceType = PieceType::King;
 
     #[inline(always)]
     fn get_attacks(from: Square, _: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -74,7 +74,7 @@ impl Attacker for Re {
 /// a flat attack table. `(64 - mask.popcount())` is computed on-the-fly for maximum performance.
 pub struct Tor;
 impl Attacker for Tor {
-    const TYPE: PieceType = PieceType::Tor;
+    const TYPE: PieceType = PieceType::Rook;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -102,7 +102,7 @@ impl Attacker for Tor {
 /// a flat attack table. `(64 - mask.popcount())` is computed on-the-fly for maximum performance.
 pub struct Alfè;
 impl Attacker for Alfè {
-    const TYPE: PieceType = PieceType::Alfè;
+    const TYPE: PieceType = PieceType::Bishop;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -121,7 +121,7 @@ impl Attacker for Alfè {
 /// Queen move generation as a union of rook and bishop attacks.
 pub struct Argina;
 impl Attacker for Argina {
-    const TYPE: PieceType = PieceType::Argina;
+    const TYPE: PieceType = PieceType::Queen;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board, attack_tables: &AttackTables) -> Bitboard {
@@ -187,7 +187,7 @@ pub fn generate_moves<P: Attacker, const WHITE: bool, const CAPTURE: bool>(board
         while attacks != Bitboard(0) {
             let to = Square::new(attacks.pop_lsb() as u8);
             if CAPTURE {
-                moves.push(Move::new_special(from, to, MoveType::Capture));
+                moves.push(Move::new_special(from, to, MoveKind::Capture));
             } else {
                 moves.push(Move::new_normal(from, to));
             }
@@ -207,7 +207,7 @@ pub fn generate_moves<P: Attacker, const WHITE: bool, const CAPTURE: bool>(board
 #[inline(always)]
 pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, attack_tables: &AttackTables, moves: &mut MoveList) {
     let our_color = if WHITE { Color::White } else { Color::Black };
-    let mut pawns = board.piece(PieceType::Pion) & board.color(our_color);
+    let mut pawns = board.piece(PieceType::Pawn) & board.color(our_color);
 
     let them = if WHITE { board.color(Color::Black) } else { board.color(Color::White) };
     let promotion_rank = if WHITE { Bitboard(0xFF00000000000000u64) } else { Bitboard(0x00000000000000FFu64) };
@@ -224,14 +224,14 @@ pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, attack_tables: &
             attacks ^= to_bb; // pop_lsb() would re-execute lsb() internally, xoring directly is faster
 
             if (to_bb & ep_square) != Bitboard(0) {
-                moves.push(Move::new_special(from, to, MoveType::EnPassant));
+                moves.push(Move::new_special(from, to, MoveKind::EnPassant));
             } else if promotion_rank & to_bb != Bitboard(0) {
-                moves.push(Move::new_special(from, to, MoveType::PromotionCaptureQ));
-                moves.push(Move::new_special(from, to, MoveType::PromotionCaptureR));
-                moves.push(Move::new_special(from, to, MoveType::PromotionCaptureB));
-                moves.push(Move::new_special(from, to, MoveType::PromotionCaptureN));
+                moves.push(Move::new_special(from, to, MoveKind::PromotionCaptureQ));
+                moves.push(Move::new_special(from, to, MoveKind::PromotionCaptureR));
+                moves.push(Move::new_special(from, to, MoveKind::PromotionCaptureB));
+                moves.push(Move::new_special(from, to, MoveKind::PromotionCaptureN));
             } else {
-                moves.push(Move::new_special(from, to, MoveType::Capture));
+                moves.push(Move::new_special(from, to, MoveKind::Capture));
             }
         }
     }
@@ -249,7 +249,7 @@ pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, attack_tables: &
 #[inline(always)]
 pub fn generate_pawn_quiets<const WHITE: bool>(board: &Board, attack_tables: &AttackTables, moves: &mut MoveList) {
     let our_color = if WHITE { Color::White } else { Color::Black };
-    let mut pawns = board.piece(PieceType::Pion) & board.color(our_color);
+    let mut pawns = board.piece(PieceType::Pawn) & board.color(our_color);
 
     let pawn_pushes = &attack_tables.pawn_push[our_color];
     let pawn_double = &attack_tables.pawn_double_push[our_color];
@@ -267,17 +267,17 @@ pub fn generate_pawn_quiets<const WHITE: bool>(board: &Board, attack_tables: &At
             attacks ^= to_bb; // pop_lsb() would re-execute lsb() internally, xoring directly is faster
 
             if promotion_rank & to_bb != Bitboard(0) {
-                moves.push(Move::new_special(from, to, MoveType::PromotionQ));
-                moves.push(Move::new_special(from, to, MoveType::PromotionR));
-                moves.push(Move::new_special(from, to, MoveType::PromotionB));
-                moves.push(Move::new_special(from, to, MoveType::PromotionN));
+                moves.push(Move::new_special(from, to, MoveKind::PromotionQ));
+                moves.push(Move::new_special(from, to, MoveKind::PromotionR));
+                moves.push(Move::new_special(from, to, MoveKind::PromotionB));
+                moves.push(Move::new_special(from, to, MoveKind::PromotionN));
             } else {
                 moves.push(Move::new_normal(from, to));
 
                 let mut double_pushes = pawn_double[from] & empty_bb;
                 if double_pushes != Bitboard(0) {
                     let to = Square::new(double_pushes.lsb() as u8);
-                    moves.push(Move::new_special(from, to, MoveType::DoublePush));
+                    moves.push(Move::new_special(from, to, MoveKind::DoublePush));
                 }
             }
         }

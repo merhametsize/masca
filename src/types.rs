@@ -144,18 +144,23 @@ impl<T> IndexMut<Square> for [T] {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum PieceType {
-    Pion = 0, // Pawn
-    Caval,    // 'Horse' in Piedmontese - Knight
-    Alfè,     // 'Standard bearer' in Piedmontese - Bishop
-    Tor,      // 'Tower' in Piedmontese - Rook
-    Argina,   // Queen
-    Re,       // King
+    Pawn = 0,
+    Knight,
+    Bishop,
+    Rook,
+    Queen,
+    King,
 }
 
 impl PieceType {
     pub const NUM: usize = 6;
+
+    pub fn new(encoding: u8) -> PieceType {
+        debug_assert!(encoding < Self::NUM as u8);
+        unsafe { core::mem::transmute(encoding) }
+    }
 }
 
 /// Allows for array indexing without explicit conversion of Color to usize.
@@ -176,37 +181,49 @@ impl<T> IndexMut<PieceType> for [T] {
 #[derive(Copy, Clone)]
 pub enum Piece {
     //White
-    PionBianch = 0,
-    CavalBianch,
-    AlfèBianch,
-    TorBianca,
-    ArginaBianca,
-    ReBianch,
+    WhitePawn = 0,
+    WhiteKnight,
+    WhiteBishop,
+    WhiteRook,
+    WhiteQueen,
+    WhiteKing,
 
     //Black
-    PionNeir,
-    CavalNeir,
-    AlfèNeir,
-    TorNeira,
-    ArginaNeira,
-    ReNeir,
+    BlackPawn,
+    BlackKnight,
+    BlackBishop,
+    BlackRook,
+    BlackQueen,
+    BlackKing,
 }
 
 impl Piece {
+    /// Builds a Piece from a Color and a PieceType.
+    #[inline(always)]
+    pub const fn new(color: Color, piece_type: PieceType) -> Self {
+        let encoding = (color as u8) * 6 + (piece_type as u8);
+        debug_assert!(encoding < 12);
+        unsafe { core::mem::transmute(encoding) }
+    }
+
+    /// Returns the color of the piece.
+    #[inline(always)]
     pub const fn get_color(self) -> Color {
-        if (self as u8) & 1 == 0 { Color::White } else { Color::Black }
+        let color_index = (self as u8) / 6;
+        debug_assert!(color_index <= 1);
+        unsafe { core::mem::transmute(color_index) }
     }
 
     /// Makes the enum self-aware, returns the piece-type.
     #[inline(always)]
     pub const fn get_type(self) -> PieceType {
         match (self as u8) >> 1 {
-            0 => PieceType::Pion,
-            1 => PieceType::Caval,
-            2 => PieceType::Alfè,
-            3 => PieceType::Tor,
-            4 => PieceType::Argina,
-            5 => PieceType::Re,
+            0 => PieceType::Pawn,
+            1 => PieceType::Knight,
+            2 => PieceType::Bishop,
+            3 => PieceType::Rook,
+            4 => PieceType::Queen,
+            5 => PieceType::King,
             _ => unreachable!(), // optional safety
         }
     }
@@ -215,18 +232,18 @@ impl Piece {
     #[rustfmt::skip]
     pub const fn to_char(self) -> char {
         match self {
-            Piece::PionBianch   => 'P',
-            Piece::CavalBianch => 'N',
-            Piece::AlfèBianch => 'B',
-            Piece::TorBianca   => 'R',
-            Piece::ArginaBianca  => 'Q',
-            Piece::ReBianch   => 'K',
-            Piece::PionNeir   => 'p',
-            Piece::CavalNeir => 'n',
-            Piece::AlfèNeir => 'b',
-            Piece::TorNeira   => 'r',
-            Piece::ArginaNeira  => 'q',
-            Piece::ReNeir   => 'k',
+            Piece::WhitePawn   => 'P',
+            Piece::WhiteKnight => 'N',
+            Piece::WhiteBishop => 'B',
+            Piece::WhiteRook   => 'R',
+            Piece::WhiteQueen  => 'Q',
+            Piece::WhiteKing   => 'K',
+            Piece::BlackPawn   => 'p',
+            Piece::BlackKnight => 'n',
+            Piece::BlackBishop => 'b',
+            Piece::BlackRook   => 'r',
+            Piece::BlackQueen  => 'q',
+            Piece::BlackKing   => 'k',
         }
     }
 
@@ -234,18 +251,18 @@ impl Piece {
     #[rustfmt::skip]
     pub const fn from_char(ch: char) -> Self {
         match ch {
-            'P' => Piece::PionBianch,
-            'N' => Piece::CavalBianch,
-            'B' => Piece::AlfèBianch,
-            'R' => Piece::TorBianca,
-            'Q' => Piece::ArginaBianca,
-            'K' => Piece::ReBianch,
-            'p' => Piece::PionNeir,
-            'n' => Piece::CavalNeir,
-            'b' => Piece::AlfèNeir,
-            'r' => Piece::TorNeira,
-            'q' => Piece::ArginaNeira,
-            'k' => Piece::ReNeir,
+            'P' => Piece::WhitePawn,
+            'N' => Piece::WhiteKnight,
+            'B' => Piece::WhiteBishop,
+            'R' => Piece::WhiteRook,
+            'Q' => Piece::WhiteQueen,
+            'K' => Piece::WhiteKing,
+            'p' => Piece::BlackPawn,
+            'n' => Piece::BlackKnight,
+            'b' => Piece::BlackBishop,
+            'r' => Piece::BlackRook,
+            'q' => Piece::BlackQueen,
+            'k' => Piece::BlackKing,
             _   => unreachable!(),
         }
     }

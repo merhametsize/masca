@@ -18,7 +18,7 @@ pub struct Move {
 #[repr(u8)]
 #[rustfmt::skip]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum MoveType {
+pub enum MoveKind {
     //Quiet
     Normal            = 0b0000,
     DoublePush        = 0b0001,
@@ -48,10 +48,16 @@ impl Move {
     }
 
     /// Encodes a "special" move (double push, castling, capture, en passant, promotion).
-    pub const fn new_special(from: Square, to: Square, movetype: MoveType) -> Self {
+    pub const fn new_special(from: Square, to: Square, movetype: MoveKind) -> Self {
         Self {
             encoding: (from as u16 | ((to as u16) << 6) | ((movetype as u16) << 12)),
         }
+    }
+
+    /// Returns the move type
+    #[inline(always)]
+    pub const fn kind(self) -> MoveKind {
+        unsafe { core::mem::transmute((self.encoding >> 12) as u8) }
     }
 
     /// Returns the origin square.
@@ -76,12 +82,6 @@ impl Move {
     #[inline(always)]
     pub const fn is_promotion(self) -> bool {
         (self.encoding & 0x8000) != 0
-    }
-
-    /// Makes the enum self-aware, returns the move type.
-    #[inline(always)]
-    pub const fn get_type(self) -> MoveType {
-        unsafe { core::mem::transmute((self.encoding >> 12) as u8) }
     }
 
     /// Checks whether the move is quiet.
@@ -116,13 +116,13 @@ impl Move {
 
     /// Returns the piece you get after a pawn promotion.
     #[inline(always)]
-    pub const fn get_promotion_piece(self) -> PieceType {
+    pub const fn promotion_piece(self) -> PieceType {
         debug_assert!(self.is_promotion());
         match (self.encoding >> 12) & 0b11 {
-            0 => PieceType::Caval,
-            1 => PieceType::Alfè,
-            2 => PieceType::Tor,
-            3 => PieceType::Argina,
+            0 => PieceType::Knight,
+            1 => PieceType::Bishop,
+            2 => PieceType::Rook,
+            3 => PieceType::Queen,
             _ => unreachable!(),
         }
     }
