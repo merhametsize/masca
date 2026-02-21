@@ -161,8 +161,6 @@ impl Board {
 
         // 10 - Flip side
         self.side_to_move = !self.side_to_move;
-
-        self.debug_validate_board();
     }
 
     /// Reverts the last move incrementally.
@@ -177,7 +175,7 @@ impl Board {
         let (us, them) = (self.side_to_move, !self.side_to_move);
 
         // 2 - Pop state
-        let previous_state = self.state_stack[self.state_idx];
+        let state = self.state_stack[self.state_idx];
         self.state_idx -= 1;
 
         // 3 - Undo destination square
@@ -186,7 +184,7 @@ impl Board {
         self.mailbox[to] = None;
 
         // 4 - Restore captured piece
-        if let Some(captured) = previous_state.captured {
+        if let Some(captured) = state.captured {
             let captured_sq = if m.is_enpassant() { if us == Color::White { to.south() } else { to.north() } } else { to };
             self.mailbox[captured_sq] = Some(captured);
             self.pieces[captured.get_type()] ^= captured_sq.bb();
@@ -195,7 +193,7 @@ impl Board {
 
         // 5 - Restore origin square
         if m.is_promotion() {
-            moved_piece = Piece::new(self.side_to_move, PieceType::Pawn);
+            moved_piece = Piece::new(!self.side_to_move, PieceType::Pawn);
         }
         self.mailbox[from] = Some(moved_piece);
         self.pieces[moved_piece.get_type()] ^= from.bb();
@@ -223,7 +221,7 @@ impl Board {
     /// Locates king square and calls `is_square_attacked`.
     pub fn king_in_check(&self, color: Color) -> bool {
         let king_bb = self.pieces[PieceType::King] & self.colors[color];
-        assert!(king_bb != Bitboard(0));
+        debug_assert!(king_bb != Bitboard(0));
 
         let king_sq = Square::new(king_bb.lsb() as u8);
         self.is_square_attacked(king_sq, !color)
@@ -447,15 +445,6 @@ impl Board {
 
         println!("  +------------------------+");
         println!("    a  b  c  d  e  f  g  h");
-    }
-
-    #[inline(always)]
-    fn debug_validate_board(&self) {
-        debug_assert!((self.pieces[PieceType::King] & self.colors[Color::White]) != Bitboard(0));
-        debug_assert!((self.pieces[PieceType::King] & self.colors[Color::Black]) != Bitboard(0));
-        debug_assert!(self.colors[Color::White] & self.colors[Color::Black] == Bitboard(0));
-        debug_assert!((self.colors[Color::White] | self.colors[Color::Black]) == self.occupied_squares());
-        debug_assert!(self.state_idx < MAX_PLY);
     }
 }
 

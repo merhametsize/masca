@@ -20,17 +20,9 @@ mod moves;
 mod perft;
 mod types;
 
-use board::Board;
-use perft::perft;
+use perft::{kiwipete, perft_n};
 
 fn main() {
-    let mut board = Board::new();
-    board.set_startpos();
-
-    board.print();
-
-    for depth in 1..=4 {
-        let nodes = perft(&mut board, depth);
-        println!("perft({}) = {}", depth, nodes);
-    }
+    kiwipete(7);
+    //perft_n(6);
 }
