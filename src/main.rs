@@ -17,37 +17,20 @@ mod board;
 mod magics;
 mod movegen;
 mod moves;
+mod perft;
 mod types;
 
 use board::Board;
-
-use crate::movegen::{Alfè, Caval, MoveList, generate_moves, generate_pawn_captures, generate_pawn_quiets};
+use perft::perft;
 
 fn main() {
     let mut board = Board::new();
     board.set_startpos();
 
-    let attack_tables = attack::AttackTables::new();
+    board.print();
 
-    let mut moves;
-
-    moves = MoveList::new();
-    generate_moves::<Caval, true, false>(&board, &attack_tables, &mut moves);
-    println!("White knight quiet moves: {}", moves.count());
-
-    moves = MoveList::new();
-    generate_moves::<Caval, true, true>(&board, &attack_tables, &mut moves);
-    println!("White knight captures: {}", moves.count());
-
-    moves = MoveList::new();
-    generate_moves::<Alfè, true, false>(&board, &attack_tables, &mut moves);
-    println!("White bishop quiet moves: {}", moves.count());
-
-    moves = MoveList::new();
-    generate_pawn_quiets::<true>(&board, &attack_tables, &mut moves);
-    println!("White pawn quiet moves: {}", moves.count());
-
-    moves = MoveList::new();
-    generate_pawn_captures::<true>(&board, &attack_tables, &mut moves);
-    println!("White pawn capture: {}", moves.count());
+    for depth in 1..=4 {
+        let nodes = perft(&mut board, depth);
+        println!("perft({}) = {}", depth, nodes);
+    }
 }

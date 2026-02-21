@@ -5,23 +5,31 @@
 
 use crate::attack::AttackTables;
 use crate::bitboard::Bitboard;
-use crate::moves::{Move, MoveKind};
+use crate::moves::Move;
 use crate::types::{Color, Piece, PieceType, Square};
 
 const MAX_PLY: usize = 128;
+
+// Castling encoding in a u8.
+pub const WK: u8 = 0b0001;
+pub const WQ: u8 = 0b0010;
+pub const BK: u8 = 0b0100;
+pub const BQ: u8 = 0b1000;
 
 /// Chess board representation.
 ///
 /// This structure maintains multiple redundant representations of the position to enable fast move generation and evaluation.
 /// It also owns a stack of incremental states used to undo moves efficiently.
 pub struct Board {
-    mailbox: [Option<Piece>; 64],       //Piece-centric redundant representation
-    pieces: [Bitboard; PieceType::NUM], //p,n,b,r,q,k, color agnostic
-    colors: [Bitboard; 2],              //Per-color occupancy
+    mailbox: [Option<Piece>; 64],       // Piece-centric redundant representation
+    pieces: [Bitboard; PieceType::NUM], // p,n,b,r,q,k, color agnostic
+    colors: [Bitboard; 2],              // Per-color occupancy
     side_to_move: Color,
 
-    state_stack: [State; MAX_PLY], //Array of states for move unmake
+    state_stack: [State; MAX_PLY], // Array of states for move unmake
     state_idx: usize,
+
+    pub attack_tables: AttackTables,
 }
 
 /// Incremental game state information.
@@ -30,10 +38,10 @@ pub struct Board {
 /// It is intended to be pushed onto `state_stack` during move execution.
 #[derive(Copy, Clone)]
 pub struct State {
-    castling: u8,
+    castling: u8, // From LSB on, white-king, white-queen, black-king, black-queen side castling
     en_passant: Option<Square>,
     halfmove: usize,
-    captured: Option<Piece>, //Which piece was captured
+    captured: Option<Piece>, // Which piece was captured in the last move
     zobrist: Bitboard,
 }
 
@@ -82,6 +90,7 @@ impl Board {
             newstate_captured = Some(captured_piece);
         }
         if moved_type == PieceType::Pawn || m.is_capture() || m.is_enpassant() {
+            //m.is_enpassant() SHOULD be redundant
             newstate_halfmove = 0; // Halfmove reset
         } else {
             newstate_halfmove = self.state_stack[self.state_idx].halfmove + 1;
@@ -121,10 +130,6 @@ impl Board {
         }
 
         // 6 - Update castling rights (branchless)
-        const WK: u8 = 0b0001;
-        const WQ: u8 = 0b0010;
-        const BK: u8 = 0b0100;
-        const BQ: u8 = 0b1000;
         let mut castling_mask: u8 = 0xFF; // Default: no change
         castling_mask &= !((from == Square::E1) as u8 * (WK | WQ)); // White king move
         castling_mask &= !((from == Square::E8) as u8 * (BK | BQ)); // Black king move
@@ -152,9 +157,12 @@ impl Board {
         new_state.captured = newstate_captured;
         new_state.castling = newstate_castling;
         new_state.halfmove = newstate_halfmove;
+        debug_assert!(self.state_idx < MAX_PLY);
 
         // 10 - Flip side
         self.side_to_move = !self.side_to_move;
+
+        self.debug_validate_board();
     }
 
     /// Reverts the last move incrementally.
@@ -162,19 +170,20 @@ impl Board {
     /// After `make_move(m)` + `unmake_move(m)`: board state must be bit-identical.
     pub fn unmake_move(&mut self, m: Move) {
         let (from, to) = (m.from(), m.to());
+        let mut moved_piece = self.piece_on_unchecked(to);
 
         // 1 - Flip side
         self.side_to_move = !self.side_to_move;
         let (us, them) = (self.side_to_move, !self.side_to_move);
 
         // 2 - Pop state
-        self.state_idx -= 1;
         let previous_state = self.state_stack[self.state_idx];
+        self.state_idx -= 1;
 
         // 3 - Undo destination square
-        let moved_type = if m.is_promotion() { PieceType::Pawn } else { self.piece_on_unchecked(to).get_type() };
-        self.pieces[moved_type] ^= to.bb();
+        self.pieces[moved_piece.get_type()] ^= to.bb();
         self.colors[us] ^= to.bb();
+        self.mailbox[to] = None;
 
         // 4 - Restore captured piece
         if let Some(captured) = previous_state.captured {
@@ -182,14 +191,14 @@ impl Board {
             self.mailbox[captured_sq] = Some(captured);
             self.pieces[captured.get_type()] ^= captured_sq.bb();
             self.colors[them] ^= captured_sq.bb();
-        } else {
-            self.mailbox[to] = None;
-        } // Empty square if no capture
+        }
 
         // 5 - Restore origin square
-        let moved_piece = Piece::new(us, moved_type);
+        if m.is_promotion() {
+            moved_piece = Piece::new(self.side_to_move, PieceType::Pawn);
+        }
         self.mailbox[from] = Some(moved_piece);
-        self.pieces[moved_type] ^= from.bb();
+        self.pieces[moved_piece.get_type()] ^= from.bb();
         self.colors[us] ^= from.bb();
 
         // 6 - Undo castling
@@ -212,18 +221,21 @@ impl Board {
     /// Returns true if `color`'s king is in check.
     ///
     /// Locates king square and calls `is_square_attacked`.
-    pub fn king_in_check(&self, color: Color, attack_tables: &AttackTables) -> bool {
+    pub fn king_in_check(&self, color: Color) -> bool {
         let king_bb = self.pieces[PieceType::King] & self.colors[color];
+        assert!(king_bb != Bitboard(0));
+
         let king_sq = Square::new(king_bb.lsb() as u8);
-        self.is_square_attacked(king_sq, !color, attack_tables)
+        self.is_square_attacked(king_sq, !color)
     }
 
     /// Returns true if square `sq` is attacked by color `by`.
     ///
     /// Uses reverse attack lookup. Constant time. No iteration over all pieces.
-    pub fn is_square_attacked(&self, sq: Square, by: Color, attack_tables: &AttackTables) -> bool {
+    pub fn is_square_attacked(&self, sq: Square, by: Color) -> bool {
         let occupancy = self.occupied_squares();
         let their_pieces = self.colors[by];
+        let attack_tables = &self.attack_tables;
 
         // Pawn attacks
         if attack_tables.pawn_capture[!by][sq] & (self.pieces[PieceType::Pawn] & their_pieces) != Bitboard(0) {
@@ -290,6 +302,12 @@ impl Board {
         self.colors[color as usize]
     }
 
+    /// Returns black or white.
+    #[inline(always)]
+    pub fn side_to_move(&self) -> Color {
+        self.side_to_move
+    }
+
     /// Returns which squares are occupied by a piece of any color.
     #[inline(always)]
     pub fn occupied_squares(&self) -> Bitboard {
@@ -306,6 +324,12 @@ impl Board {
     #[inline(always)]
     pub fn en_passant_square(&self) -> Option<Square> {
         self.state_stack[self.state_idx].en_passant
+    }
+
+    /// Returns the castling rights, encoded in a u8.
+    #[inline(always)]
+    pub fn castling_rights(&self) -> u8 {
+        self.state_stack[self.state_idx].castling
     }
 
     /// Sets board to the starting position.
@@ -400,13 +424,12 @@ impl Board {
             captured: Option::None,
             zobrist: Bitboard(0),
         };
-        self.state_idx = 1;
+        self.state_idx = 0;
 
         Ok(())
     }
 
     /// Prints the board to console terminal for debug.
-    #[cfg(debug_assertions)]
     pub fn print(&self) {
         println!("Side to move: {:?}", self.side_to_move);
         println!("  +------------------------+");
@@ -425,6 +448,15 @@ impl Board {
         println!("  +------------------------+");
         println!("    a  b  c  d  e  f  g  h");
     }
+
+    #[inline(always)]
+    fn debug_validate_board(&self) {
+        debug_assert!((self.pieces[PieceType::King] & self.colors[Color::White]) != Bitboard(0));
+        debug_assert!((self.pieces[PieceType::King] & self.colors[Color::Black]) != Bitboard(0));
+        debug_assert!(self.colors[Color::White] & self.colors[Color::Black] == Bitboard(0));
+        debug_assert!((self.colors[Color::White] | self.colors[Color::Black]) == self.occupied_squares());
+        debug_assert!(self.state_idx < MAX_PLY);
+    }
 }
 
 impl Default for Board {
@@ -437,6 +469,8 @@ impl Default for Board {
 
             state_stack: [State::default(); MAX_PLY],
             state_idx: 0,
+
+            attack_tables: AttackTables::new(),
         }
     }
 }

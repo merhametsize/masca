@@ -11,60 +11,68 @@ use crate::types::Square;
 
 /// Bitboard object defined as a struct with unnamed u64 field.
 #[repr(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
-    /// Returns rank 1 as a bitboard
+    /// Returns rank 1 as a bitboard.
     #[inline(always)]
     pub fn rank_1() -> Self {
         Self(0x0000_0000_0000_00FFu64)
     }
 
-    /// Returns rank 8 as a bitboard
+    /// Returns rank 8 as a bitboard.
     #[inline(always)]
     pub fn rank_8() -> Self {
         Self(0xFF00_0000_0000_0000u64)
     }
 
-    /// Returns file A as a bitboard
+    /// Returns file A as a bitboard.
     #[inline(always)]
     pub fn file_a() -> Self {
         Self(0x0101_0101_0101_0101u64)
     }
 
-    /// Returns file H as a bitboard
+    /// Returns file H as a bitboard.
     #[inline(always)]
     pub fn file_h() -> Self {
         Self(0x8080_8080_8080_8080u64)
     }
 
-    /// Returns the square's corresponding rank as a bitboard
+    /// Returns the square's corresponding rank as a bitboard.
     #[inline(always)]
     pub fn square_to_rank(sq: Square) -> Self {
         let rank_index = sq.rank();
         Self(0x0000_0000_0000_00FFu64 << (rank_index * 8))
     }
 
-    /// Returns the square's corresponding file as a bitboard
+    /// Returns the square's corresponding file as a bitboard.
     #[inline(always)]
     pub fn square_to_file(sq: Square) -> Self {
         let file_index = sq.file();
         Self(0x0101_0101_0101_0101u64 << file_index)
     }
 
-    /// Returns the LSB from the bitboard
+    /// Returns the LSB from the bitboard.
     #[inline(always)]
     pub fn lsb(&self) -> usize {
+        debug_assert!(self.0 != 0);
         self.0.trailing_zeros() as usize
     }
 
-    /// Pops the LSB from the bitboard, in-place
+    /// Pops the LSB from the bitboard, in-place.
     #[inline(always)]
     pub fn pop_lsb(&mut self) -> usize {
+        debug_assert!(self.0 != 0);
         let lsb = self.0.trailing_zeros() as usize;
         self.0 &= self.0 - 1;
         lsb
+    }
+
+    // Returns the square corresponding to the LSB.
+    #[inline(always)]
+    pub fn square(&self) -> Square {
+        Square::new(self.lsb() as u8)
     }
 }
 

@@ -36,7 +36,7 @@ impl Not for Color {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[rustfmt::skip]
 pub enum Square {
     A1, B1, C1, D1, E1, F1, G1, H1,
@@ -178,7 +178,7 @@ impl<T> IndexMut<PieceType> for [T] {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Piece {
     //White
     WhitePawn = 0,
@@ -217,7 +217,7 @@ impl Piece {
     /// Makes the enum self-aware, returns the piece-type.
     #[inline(always)]
     pub const fn get_type(self) -> PieceType {
-        match (self as u8) >> 1 {
+        match (self as u8) % 6 {
             0 => PieceType::Pawn,
             1 => PieceType::Knight,
             2 => PieceType::Bishop,

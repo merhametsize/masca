@@ -2,6 +2,8 @@
 //!
 //! This module contains the logic to encode a move in 16 bits.
 
+use std::fmt;
+
 use crate::types::{PieceType, Square};
 
 /// 16-bit encoded move.
@@ -125,5 +127,26 @@ impl Move {
             3 => PieceType::Queen,
             _ => unreachable!(),
         }
+    }
+}
+
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let from = self.from();
+        let to = self.to();
+        let kind = self.kind();
+
+        write!(
+            f,
+            "Move {{ from: {:?}, to: {:?}, kind: {:?}, capture: {}, promotion: {}, castling: {}, ep: {}, double_push: {} }}",
+            from,
+            to,
+            kind,
+            self.is_capture(),
+            self.is_promotion(),
+            self.is_castling(),
+            self.is_enpassant(),
+            self.is_double_push()
+        )
     }
 }
