@@ -14,6 +14,7 @@
 mod attack;
 mod bitboard;
 mod board;
+mod eval;
 mod magics;
 mod movegen;
 mod moves;
@@ -22,7 +23,8 @@ mod types;
 
 use perft::{kiwipete, perft_n};
 
+use crate::perft::benchmark_perft;
+
 fn main() {
-    kiwipete(7);
-    //perft_n(6);
+    benchmark_perft(6);
 }

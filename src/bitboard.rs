@@ -69,6 +69,12 @@ impl Bitboard {
         lsb
     }
 
+    /// Counts the 1-bits in the u64.
+    #[inline(always)]
+    pub fn popcnt(&self) -> u64 {
+        self.0.count_ones() as u64
+    }
+
     // Returns the square corresponding to the LSB.
     #[inline(always)]
     pub fn square(&self) -> Square {

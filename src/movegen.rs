@@ -140,6 +140,7 @@ impl Attacker for Argina {
     }
 }
 
+/// Generates all pseudo-legal moves for the current side to move.
 pub fn generate_all_moves(board: &Board, moves: &mut MoveList) {
     match board.side_to_move() {
         Color::White => generate_white_moves(board, moves), // ⚪️
