@@ -177,6 +177,19 @@ impl<T> IndexMut<PieceType> for [T] {
     }
 }
 
+/// Returns the value of a piece for static evaluation. Should be optimized by the compiler.
+#[inline(always)]
+pub fn piece_value(piece_type: PieceType) -> i32 {
+    match piece_type {
+        PieceType::Pawn => 100,
+        PieceType::Knight => 320,
+        PieceType::Bishop => 330,
+        PieceType::Rook => 500,
+        PieceType::Queen => 900,
+        PieceType::King => 0, // Dummy
+    }
+}
+
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 pub enum Piece {

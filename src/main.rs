@@ -21,8 +21,6 @@ mod moves;
 mod perft;
 mod types;
 
-use perft::{kiwipete, perft_n};
-
 use crate::perft::benchmark_perft;
 
 fn main() {

@@ -6,7 +6,7 @@
 use crate::attack::AttackTables;
 use crate::bitboard::Bitboard;
 use crate::moves::Move;
-use crate::types::{Color, Piece, PieceType, Square};
+use crate::types::{Color, Piece, PieceType, Square, piece_value};
 
 const MAX_PLY: usize = 128;
 
@@ -28,6 +28,8 @@ pub struct Board {
 
     state_stack: [State; MAX_PLY], // Array of states for move unmake
     state_idx: usize,
+
+    eval: i32, // Cached static evaluation score
 
     pub attack_tables: AttackTables,
 }
@@ -81,6 +83,7 @@ impl Board {
             self.colors[them] ^= captured_sq.bb();
 
             newstate_captured = Some(captured_piece);
+            self.apply_material_delta(them, captured_piece.get_type(), -1); // Update material
         } else if m.is_capture() {
             debug_assert!(self.mailbox[to].is_some()); // There must be a piece in the destination square
             let captured_piece = self.piece_on_unchecked(to);
@@ -88,9 +91,10 @@ impl Board {
             self.colors[them] ^= to.bb();
 
             newstate_captured = Some(captured_piece);
+            self.apply_material_delta(them, captured_piece.get_type(), -1); // Update material
         }
         if moved_type == PieceType::Pawn || m.is_capture() || m.is_enpassant() {
-            //m.is_enpassant() SHOULD be redundant
+            // m.is_enpassant() SHOULD be redundant
             newstate_halfmove = 0; // Halfmove reset
         } else {
             newstate_halfmove = self.state_stack[self.state_idx].halfmove + 1;
@@ -103,6 +107,9 @@ impl Board {
 
             self.mailbox[to] = Some(promoted_piece);
             self.pieces[promoted_type] ^= to.bb();
+
+            self.apply_material_delta(us, PieceType::Pawn, -1);
+            self.apply_material_delta(us, promoted_type, 1); // Yaaaasss queeeen (?)
         } else {
             self.mailbox[to] = Some(moved_piece); //Normal piece move
             self.pieces[moved_type] ^= to.bb();
@@ -189,6 +196,7 @@ impl Board {
             self.mailbox[captured_sq] = Some(captured);
             self.pieces[captured.get_type()] ^= captured_sq.bb();
             self.colors[them] ^= captured_sq.bb();
+            self.apply_material_delta(them, captured.get_type(), 1); // Update material
         }
 
         // 5 - Restore origin square
@@ -214,6 +222,15 @@ impl Board {
             self.pieces[PieceType::Rook] ^= rook_from.bb() | rook_to.bb();
             self.colors[us] ^= rook_from.bb() | rook_to.bb();
         }
+    }
+
+    /// Updates the incremental evaluation metrics stored in Board.
+    #[inline(always)]
+    fn apply_material_delta(&mut self, color: Color, piece_type: PieceType, delta: i32) {
+        debug_assert!(delta == 1 || delta == -1);
+
+        let sign = 1 - ((color as i32) << 1); // Branchless
+        self.eval += piece_value(piece_type) * delta * sign;
     }
 
     /// Returns true if `color`'s king is in check.
@@ -373,6 +390,8 @@ impl Board {
                     self.pieces[ptype] |= sq_bb;
                     self.colors[color] |= sq_bb;
 
+                    self.apply_material_delta(color, ptype, 1);
+
                     file += 1;
                 }
             }
@@ -458,6 +477,8 @@ impl Default for Board {
 
             state_stack: [State::default(); MAX_PLY],
             state_idx: 0,
+
+            eval: 0,
 
             attack_tables: AttackTables::new(),
         }
