@@ -21,8 +21,9 @@ mod moves;
 mod perft;
 mod types;
 
-use crate::perft::benchmark_perft;
+use crate::perft::{benchmark_perft, perft_n};
 
 fn main() {
-    benchmark_perft(6);
+    //benchmark_perft(6);
+    perft_n(6);
 }

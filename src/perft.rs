@@ -90,7 +90,7 @@ pub fn perft_n(depth: u64) -> u64 {
 
     let mut nodes: u64 = 0;
     for depth in 1..=depth {
-        nodes += perft(&mut board, depth);
+        nodes = perft(&mut board, depth);
         println!("perft({}): {}", depth, nodes);
     }
 
