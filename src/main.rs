@@ -19,6 +19,7 @@ mod magics;
 mod movegen;
 mod moves;
 mod perft;
+mod search;
 mod types;
 
 use crate::perft::{benchmark_perft, perft_n};
