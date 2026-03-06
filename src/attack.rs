@@ -110,6 +110,7 @@ impl AttackTables {
     }
 
     /// Writes the attack tables on a buffer for debug purposes.
+    #[allow(dead_code)]
     pub fn print(&self) {
         use std::io::{Write, stdout};
         let mut out = stdout();

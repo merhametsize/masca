@@ -19,6 +19,7 @@ pub struct Move {
 /// These are only the most-significant bits in the 16-bit move encoding.
 #[repr(u8)]
 #[rustfmt::skip]
+#[allow(dead_code)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum MoveKind {
     //Quiet
@@ -56,12 +57,6 @@ impl Move {
         }
     }
 
-    /// Returns the move type
-    #[inline(always)]
-    pub const fn kind(self) -> MoveKind {
-        unsafe { core::mem::transmute((self.encoding >> 12) as u8) }
-    }
-
     /// Returns the origin square.
     #[inline(always)]
     pub const fn from(self) -> Square {
@@ -88,12 +83,14 @@ impl Move {
 
     /// Checks whether the move is quiet.
     #[inline(always)]
+    #[allow(dead_code)]
     pub const fn is_quiet(self) -> bool {
         (self.encoding & 0xF000) == 0
     }
 
     /// Checks whether the move is noisy.
     #[inline(always)]
+    #[allow(dead_code)]
     pub const fn is_noisy(self) -> bool {
         (self.encoding & 0xC000) != 0
     }
@@ -132,21 +129,28 @@ impl Move {
 
 impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // 1. Get the basic square coordinates
         let from = self.from();
         let to = self.to();
-        let kind = self.kind();
 
-        write!(
-            f,
-            "Move {{ from: {:?}, to: {:?}, kind: {:?}, capture: {}, promotion: {}, castling: {}, ep: {}, double_push: {} }}",
-            from,
-            to,
-            kind,
-            self.is_capture(),
-            self.is_promotion(),
-            self.is_castling(),
-            self.is_enpassant(),
-            self.is_double_push()
-        )
+        // 2. Format the squares (e.g., "e2", "e4")
+        let from_str = format!("{:?}", from).to_lowercase();
+        let to_str = format!("{:?}", to).to_lowercase();
+
+        write!(f, "{}{}", from_str, to_str)?;
+
+        // 3. Handle Promotion suffix
+        if self.is_promotion() {
+            let promo_char = match self.promotion_piece() {
+                PieceType::Knight => 'n',
+                PieceType::Bishop => 'b',
+                PieceType::Rook => 'r',
+                PieceType::Queen => 'q',
+                _ => ' ',
+            };
+            write!(f, "{}", promo_char)?;
+        }
+
+        Ok(())
     }
 }

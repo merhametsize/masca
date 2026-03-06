@@ -44,6 +44,8 @@ pub struct State {
     en_passant: Option<Square>,
     halfmove: usize,
     captured: Option<Piece>, // Which piece was captured in the last move
+
+    #[allow(dead_code)]
     zobrist: Bitboard,
 }
 
@@ -60,9 +62,9 @@ impl Board {
         let (us, them) = (self.side_to_move, !self.side_to_move);
 
         // 1 - Prepare state change variables
+        let newstate_halfmove;
         let mut newstate_en_passant = None;
         let mut newstate_captured = None;
-        let mut newstate_halfmove = 0;
         let mut newstate_castling = self.state_stack[self.state_idx].castling;
 
         // 2 - Remove from origin
@@ -201,7 +203,10 @@ impl Board {
 
         // 5 - Restore origin square
         if m.is_promotion() {
+            let promoted_type = moved_piece.get_type();
             moved_piece = Piece::new(!self.side_to_move, PieceType::Pawn);
+            self.apply_material_delta(us, promoted_type, -1); // Remove promoted piece value
+            self.apply_material_delta(us, PieceType::Pawn, 1); // Restore pawn value
         }
         self.mailbox[from] = Some(moved_piece);
         self.pieces[moved_piece.get_type()] ^= from.bb();

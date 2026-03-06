@@ -13,6 +13,7 @@ use crate::board::Board;
 use crate::movegen::MoveList;
 use crate::movegen::generate_all_moves;
 
+#[allow(dead_code)]
 pub fn benchmark_perft(depth: u64) {
     let mut board = Board::new();
     board.set_startpos();
@@ -70,18 +71,19 @@ pub fn perft(board: &mut Board, depth: u64) -> u64 {
     let mut nodes = 0;
 
     for m in list.iter() {
-        board.make_move(*m);
+        board.make_move(m);
 
         if !board.king_in_check(!board.side_to_move()) {
             nodes += perft(board, depth - 1);
         }
 
-        board.unmake_move(*m);
+        board.unmake_move(m);
     }
 
     nodes
 }
 
+#[allow(dead_code)]
 pub fn perft_n(depth: u64) -> u64 {
     let mut board = Board::new();
     board.set_startpos();

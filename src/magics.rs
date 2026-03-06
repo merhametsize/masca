@@ -277,6 +277,7 @@ impl MagicTables {
         attacks
     }
 
+    #[allow(dead_code)]
     pub fn print(&self) {
         println!("=== MAGIC TABLES ===");
         println!("Square |        Rook Magic        Offset |       Bishop Magic       Offset");

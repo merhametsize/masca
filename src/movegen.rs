@@ -26,19 +26,33 @@ impl MoveList {
     }
 
     /// Pushes a move into the list.
+    #[inline(always)]
     pub fn push(&mut self, m: Move) {
         self.moves[self.count] = m;
         self.count += 1;
     }
 
+    /// Swaps two moves in the list, used for move ordering.
+    #[inline(always)]
+    pub fn swap(&mut self, a: usize, b: usize) {
+        self.moves.swap(a, b);
+    }
+
     /// Returns the number of moves in the list.
+    #[inline(always)]
     pub fn count(&self) -> usize {
         self.count
     }
 
+    /// Returns the i-th move
+    #[inline(always)]
+    pub fn get(&self, i: usize) -> Move {
+        self.moves[i]
+    }
+
     /// Allows iteration over the move list.
-    pub fn iter(&self) -> impl Iterator<Item = &Move> {
-        self.moves[..self.count].iter()
+    pub fn iter(&self) -> impl Iterator<Item = Move> + '_ {
+        self.moves[..self.count].iter().copied()
     }
 }
 
@@ -148,7 +162,35 @@ pub fn generate_all_moves(board: &Board, moves: &mut MoveList) {
     }
 }
 
-/// Generates all moves for white except castling. ⚪️
+/// Generates of pseudo-legal captures for the current side to move.
+pub fn generate_all_captures(board: &Board, moves: &mut MoveList) {
+    match board.side_to_move() {
+        Color::White => generate_white_captures(board, moves), // ⚪️
+        Color::Black => generate_black_captures(board, moves), // ⚫️
+    }
+}
+
+/// Generates all captures for white. ⚪️
+pub fn generate_white_captures(board: &Board, moves: &mut MoveList) {
+    generate_moves::<Caval, true, true>(board, moves);
+    generate_moves::<Re, true, true>(board, moves);
+    generate_moves::<Alfè, true, true>(board, moves);
+    generate_moves::<Tor, true, true>(board, moves);
+    generate_moves::<Argina, true, true>(board, moves);
+    generate_pawn_captures::<true>(board, moves);
+}
+
+/// Generates all captures for black. ⚫️
+pub fn generate_black_captures(board: &Board, moves: &mut MoveList) {
+    generate_moves::<Caval, false, true>(board, moves);
+    generate_moves::<Re, false, true>(board, moves);
+    generate_moves::<Alfè, false, true>(board, moves);
+    generate_moves::<Tor, false, true>(board, moves);
+    generate_moves::<Argina, false, true>(board, moves);
+    generate_pawn_captures::<false>(board, moves);
+}
+
+/// Generates all moves for white. ⚪️
 pub fn generate_white_moves(board: &Board, moves: &mut MoveList) {
     generate_moves::<Caval, true, false>(board, moves);
     generate_moves::<Caval, true, true>(board, moves);
@@ -167,7 +209,7 @@ pub fn generate_white_moves(board: &Board, moves: &mut MoveList) {
     generate_castling::<true>(board, moves);
 }
 
-/// Generates all moves for black except castling. ⚫️
+/// Generates all moves for black. ⚫️
 pub fn generate_black_moves(board: &Board, moves: &mut MoveList) {
     generate_moves::<Caval, false, false>(board, moves);
     generate_moves::<Caval, false, true>(board, moves);
