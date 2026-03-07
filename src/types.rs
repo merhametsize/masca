@@ -128,6 +128,21 @@ impl Square {
     }
 }
 
+use std::fmt;
+impl fmt::Display for Square {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let idx = *self as u8;
+
+        let file = (idx % 8) as u8;
+        let rank = (idx / 8) as u8;
+
+        let file_char = (b'a' + file) as char;
+        let rank_char = (b'1' + rank) as char;
+
+        write!(f, "{}{}", file_char, rank_char)
+    }
+}
+
 /// Allows for array indexing without explicit conversion of Color to usize.
 /// Example: `array[Color::White]`
 impl<T> Index<Square> for [T] {

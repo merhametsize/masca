@@ -133,11 +133,7 @@ impl fmt::Display for Move {
         let from = self.from();
         let to = self.to();
 
-        // 2. Format the squares (e.g., "e2", "e4")
-        let from_str = format!("{:?}", from).to_lowercase();
-        let to_str = format!("{:?}", to).to_lowercase();
-
-        write!(f, "{}{}", from_str, to_str)?;
+        write!(f, "{}{}", from, to)?;
 
         // 3. Handle Promotion suffix
         if self.is_promotion() {

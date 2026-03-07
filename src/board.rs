@@ -238,10 +238,11 @@ impl Board {
         self.eval += piece_value(piece_type) * delta * sign;
     }
 
-    /// Returns the current static evaluation of the position.
+    /// Returns color-relative static evaluation of the position.
     #[inline(always)]
-    pub fn evaluate(&mut self) -> i32 {
-        self.eval
+    pub fn evaluate_relative(&mut self) -> i32 {
+        let sign = 1 - ((self.side_to_move as i32) << 1); // Branchless
+        self.eval * sign
     }
 
     /// Returns true if `color`'s king is in check.

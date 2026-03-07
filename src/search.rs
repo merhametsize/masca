@@ -1,7 +1,6 @@
 use crate::board::Board;
 use crate::movegen::{MoveList, generate_all_captures, generate_all_moves};
 use crate::moves::Move;
-use crate::types::Color;
 use crate::types::{PieceType, piece_value};
 
 const SCORE_INF: i32 = 32_000;
@@ -15,6 +14,8 @@ pub struct Searcher<'a> {
 
     pv_table: [[Move; 64]; 64],
     pv_length: [usize; 64],
+
+    killers: [[Move; 2]; 64],
 }
 
 impl<'a> Searcher<'a> {
@@ -26,6 +27,8 @@ impl<'a> Searcher<'a> {
 
             pv_table: [[Move::NULL_MOVE; 64]; 64],
             pv_length: [0; 64],
+
+            killers: [[Move::NULL_MOVE; 2]; 64], // Most beta cutoffs are caused by at most 2 moves per ply
         }
     }
 
@@ -37,11 +40,17 @@ impl<'a> Searcher<'a> {
         self.nodes = 0;
         self.best_move = Move::NULL_MOVE;
         self.pv_table.iter_mut().for_each(|t| t.fill(Move::NULL_MOVE));
+        self.pv_length.fill(0);
+        self.killers = [[Move::NULL_MOVE; 2]; 64];
 
         for depth in 1..=max_depth {
             let score = self.search::<true>(depth, 0, -SCORE_INF, SCORE_INF);
 
-            println!("info depth {} score cp {} nodes {} pv {}", depth, score, self.nodes, self.best_move.to_string());
+            print!("info depth {} score cp {} nodes {} pv", depth, score, self.nodes);
+            for i in 0..self.pv_length[0] {
+                print!(" {}", self.pv_table[0][i]);
+            }
+            println!("");
 
             // TODO: early exit
         }
@@ -51,51 +60,46 @@ impl<'a> Searcher<'a> {
     fn search<const IS_PV: bool>(&mut self, depth: usize, ply: usize, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
+        // 1 - Target depth reached, quiescence search.
         if depth == 0 {
-            return self.quiescence(alpha, beta);
+            return self.quiescence(ply, alpha, beta);
         }
 
+        // 2 - Generate all moves and sort them.
         let mut moves = MoveList::new();
         generate_all_moves(self.board, &mut moves);
-        self.order_moves(&mut moves, ply);
+        self.order_moves::<false>(&mut moves, ply);
 
-        let mut move_count = 0;
-
-        for m in moves.iter() {
+        // 3 - Iterate over possible moves.
+        for (move_idx, m) in moves.iter().enumerate() {
+            // 4 - Make move, undo and continue if illegal.
             self.board.make_move(m);
-
-            // Legality check
             if self.board.king_in_check(!self.board.side_to_move()) {
                 self.board.unmake_move(m);
                 continue;
             }
 
-            move_count += 1;
+            // 5 - Principal Variation Search (PVS): only search the first/best move with full window.
             let mut score: i32;
-
-            if move_count == 1 {
-                // Principal variation -> full window search
+            if move_idx == 0 {
                 score = -self.search::<IS_PV>(depth - 1, ply + 1, -beta, -alpha);
             } else {
-                // Null-window search
-                score = -self.search::<false>(depth - 1, ply + 1, -alpha - 1, -alpha);
+                score = -self.search::<false>(depth - 1, ply + 1, -alpha - 1, -alpha); // Null window search
 
                 if IS_PV && score > alpha && score < beta {
-                    // Research if null-window search failed high
-                    score = -self.search::<true>(depth - 1, ply + 1, -beta, -alpha);
+                    score = -self.search::<true>(depth - 1, ply + 1, -beta, -alpha); // Fail high --> research
                 }
             }
 
+            // 6 - Unmake move
             self.board.unmake_move(m);
 
-            let initial_eval = self.board.evaluate();
-            self.board.make_move(m);
-            self.board.unmake_move(m);
-            if initial_eval != self.board.evaluate() {
-                panic!("Eval mismatch after make/unmake! Move: {}", m.to_string());
-            }
-
+            // 7 - Update alpha, beta, and principal variation
             if score >= beta {
+                if !m.is_capture() {
+                    self.killers[ply][1] = self.killers[ply][0];
+                    self.killers[ply][0] = m;
+                }
                 return beta; // Fail-high, beta cutoff
             }
             if score > alpha {
@@ -104,9 +108,10 @@ impl<'a> Searcher<'a> {
 
                 // Copy the PV from the next ply into this ply's row
                 let next_ply = ply + 1;
+                assert!(ply + 1 < 64);
                 let child_len = self.pv_length[next_ply];
-                for i in child_len..(next_ply + child_len) {
-                    self.pv_table[ply][next_ply + i] = self.pv_table[next_ply][next_ply + i];
+                for i in 0..child_len {
+                    self.pv_table[ply][ply + 1 + i] = self.pv_table[next_ply][next_ply + i];
                 }
                 self.pv_length[ply] = child_len + 1;
 
@@ -117,7 +122,7 @@ impl<'a> Searcher<'a> {
         }
 
         // Checkmate & stalemate detection
-        if move_count == 0 {
+        if moves.count() == 0 {
             return if self.board.king_in_check(self.board.side_to_move()) {
                 -SCORE_MATE + (ply as i32) // Checkmate in N
             } else {
@@ -128,35 +133,32 @@ impl<'a> Searcher<'a> {
         alpha
     }
 
-    fn quiescence(&mut self, mut alpha: i32, beta: i32) -> i32 {
+    fn quiescence(&mut self, ply: usize, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
         let in_check = self.board.king_in_check(self.board.side_to_move());
         if !in_check {
-            let stand_pat = if self.board.side_to_move() == Color::White { self.board.evaluate() } else { -self.board.evaluate() };
-            if stand_pat >= beta {
+            let eval = self.board.evaluate_relative();
+            if eval >= beta {
                 return beta;
             }
-            if alpha < stand_pat {
-                alpha = stand_pat;
+            if alpha < eval {
+                alpha = eval;
             }
         }
 
         let mut moves = MoveList::new();
         generate_all_captures(self.board, &mut moves);
+        self.order_moves::<true>(&mut moves, ply);
 
         for m in moves.iter() {
-            if !m.is_capture() && !m.is_enpassant() {
-                continue;
-            }
-
             self.board.make_move(m);
             if self.board.king_in_check(!self.board.side_to_move()) {
                 self.board.unmake_move(m);
                 continue;
             }
 
-            let score = -self.quiescence(-beta, -alpha);
+            let score = -self.quiescence(ply + 1, -beta, -alpha);
             self.board.unmake_move(m);
 
             if score >= beta {
@@ -170,21 +172,28 @@ impl<'a> Searcher<'a> {
         alpha
     }
 
-    fn score_move(&self, m: Move, ply: usize) -> i32 {
-        // 1. PV Move gets highest priority
-        if m == self.pv_table[ply][ply] {
+    fn score_move<const QUIESCENCE: bool>(&self, m: Move, ply: usize) -> i32 {
+        // 1 - PV Move gets highest priority
+        if !QUIESCENCE && m == self.pv_table[ply][ply] {
             return 20000;
         }
 
-        // 2. Captures (most valuable victim - least valuable attacker)
+        // 2 - Captures (most valuable victim - least valuable attacker)
         if m.is_capture() || m.is_enpassant() {
             let attacker = self.board.piece_on_unchecked(m.from()).get_type();
             let victim = if m.is_enpassant() { PieceType::Pawn } else { self.board.piece_on_unchecked(m.to()).get_type() };
 
-            // Formula: (Victim * 10) - Attacker.
-            // A Pawn (1) taking a Queen (5) = 50 - 1 = 49 (High priority)
-            // A Queen (5) taking a Pawn (1) = 10 - 5 = 5 (Lower priority)
-            return 10000 + (piece_value(victim) / 10) - (piece_value(attacker) / 100);
+            // Formula: (Victim * 100) - Attacker.
+            // A Pawn (1) taking a Queen (5) = 900 - 1 = 899 (High priority)
+            // A Queen (9) taking a Pawn (1) = 100 - 9 = 91 (Lower priority)
+            return (piece_value(victim) * 100) - piece_value(attacker);
+        }
+
+        // 3 - Killer moves
+        if !QUIESCENCE && m == self.killers[ply][0] {
+            return 9000;
+        } else if !QUIESCENCE && m == self.killers[ply][1] {
+            return 8000;
         }
 
         0 // Quiet moves
@@ -192,11 +201,11 @@ impl<'a> Searcher<'a> {
 
     /// Move ordering logic
     #[inline(always)]
-    fn order_moves(&self, moves: &mut MoveList, ply: usize) {
+    fn order_moves<const QUIESCENCE: bool>(&self, moves: &mut MoveList, ply: usize) {
         // We don't need to sort the whole list at once. Just calculate scores and let the search pick the best one.
         let mut scores = [0; 256];
         for i in 0..moves.count() {
-            scores[i] = self.score_move(moves.get(i), ply);
+            scores[i] = self.score_move::<QUIESCENCE>(moves.get(i), ply);
         }
 
         // Simple selection sort to move best scores to the front
