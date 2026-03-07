@@ -67,34 +67,49 @@ impl<'a> Searcher<'a> {
 
         // 2 - Generate all moves and sort them.
         let mut moves = MoveList::new();
+        let mut scores = [0i32; 256];
         generate_all_moves(self.board, &mut moves);
-        self.order_moves::<false>(&mut moves, ply);
+        self.score_moves::<false>(&moves, ply, &mut scores);
 
         // 3 - Iterate over possible moves.
-        for (move_idx, m) in moves.iter().enumerate() {
+        let mut legal_move_count = 0;
+        for move_idx in 0..moves.count() {
+            self.pick_best_move(&mut moves, &mut scores, move_idx);
+            let m = moves.get(move_idx);
+
             // 4 - Make move, undo and continue if illegal.
             self.board.make_move(m);
-            if self.board.king_in_check(!self.board.side_to_move()) {
+            let in_check = self.board.king_in_check(!self.board.side_to_move());
+            if in_check {
                 self.board.unmake_move(m);
                 continue;
             }
+            legal_move_count += 1;
 
             // 5 - Principal Variation Search (PVS): only search the first/best move with full window.
             let mut score: i32;
-            if move_idx == 0 {
-                score = -self.search::<IS_PV>(depth - 1, ply + 1, -beta, -alpha);
-            } else {
-                score = -self.search::<false>(depth - 1, ply + 1, -alpha - 1, -alpha); // Null window search
+            if IS_PV {
+                if move_idx == 0 {
+                    score = -self.search::<IS_PV>(depth - 1, ply + 1, -beta, -alpha); // Full window
+                } else {
+                    score = -self.search::<false>(depth - 1, ply + 1, -alpha - 1, -alpha); // Null window
 
-                if IS_PV && score > alpha && score < beta {
-                    score = -self.search::<true>(depth - 1, ply + 1, -beta, -alpha); // Fail high --> research
+                    if score > alpha && beta - alpha > 1 {
+                        score = -self.search::<false>(depth - 1, ply + 1, -beta, -alpha); // Fail high -> research
+                    }
+                }
+            } else {
+                // Non-PV node (Cut/All) → always null-window
+                score = -self.search::<false>(depth - 1, ply + 1, -alpha - 1, -alpha);
+                if score > alpha && beta - alpha > 1 {
+                    score = -self.search::<false>(depth - 1, ply + 1, -beta, -alpha);
                 }
             }
 
-            // 6 - Unmake move
+            // 7 - Unmake move
             self.board.unmake_move(m);
 
-            // 7 - Update alpha, beta, and principal variation
+            // 8 - Update alpha, beta, and principal variation
             if score >= beta {
                 if !m.is_capture() {
                     self.killers[ply][1] = self.killers[ply][0];
@@ -121,8 +136,8 @@ impl<'a> Searcher<'a> {
             }
         }
 
-        // Checkmate & stalemate detection
-        if moves.count() == 0 {
+        // 9 - Checkmate & stalemate detection
+        if legal_move_count == 0 {
             return if self.board.king_in_check(self.board.side_to_move()) {
                 -SCORE_MATE + (ply as i32) // Checkmate in N
             } else {
@@ -133,6 +148,7 @@ impl<'a> Searcher<'a> {
         alpha
     }
 
+    /// Performs quiescence search.
     fn quiescence(&mut self, ply: usize, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
@@ -148,10 +164,14 @@ impl<'a> Searcher<'a> {
         }
 
         let mut moves = MoveList::new();
+        let mut scores = [0i32; 256];
         generate_all_captures(self.board, &mut moves);
-        self.order_moves::<true>(&mut moves, ply);
+        self.score_moves::<false>(&moves, ply, &mut scores);
 
-        for m in moves.iter() {
+        for move_idx in 0..moves.count() {
+            self.pick_best_move(&mut moves, &mut scores, move_idx);
+            let m = moves.get(move_idx);
+
             self.board.make_move(m);
             if self.board.king_in_check(!self.board.side_to_move()) {
                 self.board.unmake_move(m);
@@ -172,13 +192,25 @@ impl<'a> Searcher<'a> {
         alpha
     }
 
+    /// Assigns each move a score depending on how promising it is.
+    #[inline(always)]
+    fn score_moves<const QUIESCENCE: bool>(&self, moves: &MoveList, ply: usize, scores: &mut [i32; 256]) {
+        let n = moves.count();
+
+        for i in 0..n {
+            scores[i] = self.score_move::<QUIESCENCE>(moves.get(i), ply);
+        }
+    }
+
+    /// Assigns a score to a specific move. Uses PV-table, MVV-LVA and killer move heuristics.
+    #[inline(always)]
     fn score_move<const QUIESCENCE: bool>(&self, m: Move, ply: usize) -> i32 {
         // 1 - PV Move gets highest priority
         if !QUIESCENCE && m == self.pv_table[ply][ply] {
             return 20000;
         }
 
-        // 2 - Captures (most valuable victim - least valuable attacker)
+        // 2 - Captures, MVV-LVA (most valuable victim - least valuable attacker)
         if m.is_capture() || m.is_enpassant() {
             let attacker = self.board.piece_on_unchecked(m.from()).get_type();
             let victim = if m.is_enpassant() { PieceType::Pawn } else { self.board.piece_on_unchecked(m.to()).get_type() };
@@ -190,32 +222,27 @@ impl<'a> Searcher<'a> {
         }
 
         // 3 - Killer moves
-        if !QUIESCENCE && m == self.killers[ply][0] {
-            return 9000;
-        } else if !QUIESCENCE && m == self.killers[ply][1] {
-            return 8000;
+        if !QUIESCENCE {
+            if m == self.killers[ply][0] {
+                return 9000;
+            } else if m == self.killers[ply][1] {
+                return 8000;
+            }
         }
 
         0 // Quiet moves
     }
 
-    /// Move ordering logic
+    /// Picks the best move among the remaining ones (start_idx..last_idx) and places it at start_idx.
     #[inline(always)]
-    fn order_moves<const QUIESCENCE: bool>(&self, moves: &mut MoveList, ply: usize) {
-        // We don't need to sort the whole list at once. Just calculate scores and let the search pick the best one.
-        let mut scores = [0; 256];
-        for i in 0..moves.count() {
-            scores[i] = self.score_move::<QUIESCENCE>(moves.get(i), ply);
-        }
-
-        // Simple selection sort to move best scores to the front
-        for i in 0..moves.count() {
-            for j in i + 1..moves.count() {
-                if scores[j] > scores[i] {
-                    scores.swap(i, j);
-                    moves.swap(i, j);
-                }
+    fn pick_best_move(&self, moves: &mut MoveList, scores: &mut [i32; 256], start_idx: usize) {
+        let mut best_idx = start_idx;
+        for i in (start_idx + 1)..moves.count() {
+            if scores[i] > scores[best_idx] {
+                best_idx = i;
             }
         }
+        moves.swap(start_idx, best_idx);
+        scores.swap(start_idx, best_idx);
     }
 }

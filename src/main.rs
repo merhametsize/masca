@@ -32,5 +32,5 @@ fn main() {
     board.print();
 
     let mut searcher = Searcher::new(&mut board);
-    searcher.iterative_deepening(7);
+    searcher.iterative_deepening(9);
 }
