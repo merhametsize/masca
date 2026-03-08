@@ -16,6 +16,8 @@ pub struct Searcher<'a> {
     pv_length: [usize; 64],
 
     killers: [[Move; 2]; 64],
+
+    lmr_table: [[usize; 64]; 64], // Late Move Reductions (LMR) table
 }
 
 impl<'a> Searcher<'a> {
@@ -29,6 +31,8 @@ impl<'a> Searcher<'a> {
             pv_length: [0; 64],
 
             killers: [[Move::NULL_MOVE; 2]; 64], // Most beta cutoffs are caused by at most 2 moves per ply
+
+            lmr_table: Self::init_lmr_table(),
         }
     }
 
@@ -65,14 +69,14 @@ impl<'a> Searcher<'a> {
             return self.quiescence(ply, alpha, beta);
         }
 
-        // 2 - Generate all moves and sort them.
+        // 2 - Generate all moves and score them.
         let mut moves = MoveList::new();
         let mut scores = [0i32; 256];
         generate_all_moves(self.board, &mut moves);
         self.score_moves::<false>(&moves, ply, &mut scores);
 
         // 3 - Iterate over possible moves.
-        let mut legal_move_count = 0;
+        let mut legal_move_count = 0; // Flag used for mate and stalemate detection
         for move_idx in 0..moves.count() {
             self.pick_best_move(&mut moves, &mut scores, move_idx);
             let m = moves.get(move_idx);
@@ -86,30 +90,46 @@ impl<'a> Searcher<'a> {
             }
             legal_move_count += 1;
 
-            // 5 - Principal Variation Search (PVS): only search the first/best move with full window.
+            // 5 - Late Move Reductions
+            let mut reduction = 0usize;
+            let gives_check = self.board.king_in_check(self.board.side_to_move());
+            if !IS_PV
+                && depth >= 3
+                && move_idx >= 3
+                && !m.is_capture()
+                && !m.is_promotion()
+                && !gives_check
+                && m != self.killers[ply][0]
+                && m != self.killers[ply][1]
+            {
+                reduction = self.lmr_table[depth.min(63)][move_idx.min(63)];
+            }
+            let reduced_depth = depth.saturating_sub(reduction);
+
+            // 6 - Principal Variation Search (PVS): only search the first/best move with full window.
             let mut score: i32;
             if IS_PV {
                 if move_idx == 0 {
                     score = -self.search::<IS_PV>(depth - 1, ply + 1, -beta, -alpha); // Full window
                 } else {
-                    score = -self.search::<false>(depth - 1, ply + 1, -alpha - 1, -alpha); // Null window
+                    score = -self.search::<false>(reduced_depth - 1, ply + 1, -alpha - 1, -alpha); // Null window
 
                     if score > alpha && beta - alpha > 1 {
                         score = -self.search::<false>(depth - 1, ply + 1, -beta, -alpha); // Fail high -> research
                     }
                 }
             } else {
-                // Non-PV node (Cut/All) → always null-window
-                score = -self.search::<false>(depth - 1, ply + 1, -alpha - 1, -alpha);
+                // Non-PV node --> always null-window, no branch
+                score = -self.search::<false>(reduced_depth - 1, ply + 1, -alpha - 1, -alpha);
                 if score > alpha && beta - alpha > 1 {
                     score = -self.search::<false>(depth - 1, ply + 1, -beta, -alpha);
                 }
             }
 
-            // 7 - Unmake move
+            // 8 - Unmake move
             self.board.unmake_move(m);
 
-            // 8 - Update alpha, beta, and principal variation
+            // 9 - Update alpha, beta, and PV-table
             if score >= beta {
                 if !m.is_capture() {
                     self.killers[ply][1] = self.killers[ply][0];
@@ -123,7 +143,6 @@ impl<'a> Searcher<'a> {
 
                 // Copy the PV from the next ply into this ply's row
                 let next_ply = ply + 1;
-                assert!(ply + 1 < 64);
                 let child_len = self.pv_length[next_ply];
                 for i in 0..child_len {
                     self.pv_table[ply][ply + 1 + i] = self.pv_table[next_ply][next_ply + i];
@@ -136,7 +155,7 @@ impl<'a> Searcher<'a> {
             }
         }
 
-        // 9 - Checkmate & stalemate detection
+        // 10 - Checkmate & stalemate detection
         if legal_move_count == 0 {
             return if self.board.king_in_check(self.board.side_to_move()) {
                 -SCORE_MATE + (ply as i32) // Checkmate in N
@@ -244,5 +263,30 @@ impl<'a> Searcher<'a> {
         }
         moves.swap(start_idx, best_idx);
         scores.swap(start_idx, best_idx);
+    }
+
+    /// Initializes the Late Move Reduction (LMR) table.
+    ///
+    /// The table stores the number of plies by which the search depth should be reduced for late moves in the move ordering.
+    /// It is indexed by `[depth][move_number]`. Reductions grow logarithmically with both the current search depth and the move index,
+    /// meaning deeper nodes and later moves receive stronger reductions. This allows the engine to search promising moves fully
+    /// while saving time on less likely candidates.
+    ///
+    /// The table is computed once at startup and reused during search.
+    fn init_lmr_table() -> [[usize; 64]; 64] {
+        let mut table = [[0usize; 64]; 64];
+
+        for depth in 1..64 {
+            for move_number in 1..64 {
+                let d = depth as f64;
+                let m = move_number as f64;
+
+                let reduction = (d.ln() * m.ln() / 2.0) as usize;
+
+                table[depth][move_number] = reduction;
+            }
+        }
+
+        table
     }
 }
