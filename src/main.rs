@@ -14,6 +14,7 @@
 mod attack;
 mod bitboard;
 mod board;
+mod eval;
 mod magics;
 mod movegen;
 mod moves;
@@ -44,5 +45,5 @@ fn main() {
     board.print();
 
     let mut searcher = Searcher::new(&mut board);
-    searcher.iterative_deepening(13);
+    searcher.iterative_deepening(10);
 }

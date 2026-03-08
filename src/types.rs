@@ -126,6 +126,10 @@ impl Square {
     pub fn bb(self) -> Bitboard {
         Bitboard(1u64 << (self as u8))
     }
+
+    pub fn mirror_rank(self) -> Square {
+        unsafe { std::mem::transmute((self as u8) ^ 56) }
+    }
 }
 
 use std::fmt;
@@ -171,6 +175,7 @@ pub enum PieceType {
 
 impl PieceType {
     pub const NUM: usize = 6;
+    pub const ALL: [PieceType; 6] = [PieceType::Pawn, PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen, PieceType::King];
 
     pub fn new(encoding: u8) -> PieceType {
         debug_assert!(encoding < Self::NUM as u8);
