@@ -81,7 +81,19 @@ impl<'a> Searcher<'a> {
             self.pick_best_move(&mut moves, &mut scores, move_idx);
             let m = moves.get(move_idx);
 
-            // 4 - Make move, undo and continue if illegal.
+            // 4 - Null move pruning
+            let in_check = self.board.king_in_check(self.board.side_to_move());
+            if !IS_PV && depth >= 3 && !in_check {
+                self.board.make_null_move();
+                let score = -self.search::<false>(depth - 1 - 2, ply + 1, -beta, -beta + 1);
+                self.board.unmake_null_move();
+
+                if score >= beta {
+                    return beta;
+                }
+            }
+
+            // 5 - Make move, undo and continue if illegal.
             self.board.make_move(m);
             let in_check = self.board.king_in_check(!self.board.side_to_move());
             if in_check {
@@ -90,7 +102,7 @@ impl<'a> Searcher<'a> {
             }
             legal_move_count += 1;
 
-            // 5 - Late Move Reductions
+            // 6 - Late Move Reductions
             let mut reduction = 0usize;
             let gives_check = self.board.king_in_check(self.board.side_to_move());
             if !IS_PV
@@ -106,7 +118,7 @@ impl<'a> Searcher<'a> {
             }
             let reduced_depth = depth.saturating_sub(reduction);
 
-            // 6 - Principal Variation Search (PVS): only search the first/best move with full window.
+            // 7 - Principal Variation Search (PVS): only search the first/best move with full window.
             let mut score: i32;
             if IS_PV {
                 if move_idx == 0 {

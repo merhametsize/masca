@@ -229,6 +229,24 @@ impl Board {
         }
     }
 
+    /// Makes a null move, used for null-move pruning.
+    #[inline(always)]
+    pub fn make_null_move(&mut self) {
+        self.side_to_move = !self.side_to_move;
+        let old_state = self.state_stack[self.state_idx];
+        self.state_idx += 1;
+        let new_state = &mut self.state_stack[self.state_idx];
+        *new_state = old_state; // Struct assign
+        new_state.en_passant = None;
+    }
+
+    /// Unmakes the null move, used for null-move pruning.
+    #[inline(always)]
+    pub fn unmake_null_move(&mut self) {
+        self.side_to_move = !self.side_to_move;
+        self.state_idx -= 1;
+    }
+
     /// Updates the incremental evaluation metrics stored in Board.
     #[inline(always)]
     fn apply_material_delta(&mut self, color: Color, piece_type: PieceType, delta: i32) {
