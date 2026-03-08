@@ -1,7 +1,7 @@
 use crate::board::Board;
 use crate::movegen::{MoveList, generate_all_captures, generate_all_moves};
 use crate::moves::Move;
-use crate::types::{PieceType, piece_value};
+use crate::types::{Color, PieceType, Square, piece_value};
 
 const SCORE_INF: i32 = 32_000;
 const SCORE_MATE: i32 = 29_000;
@@ -17,7 +17,8 @@ pub struct Searcher<'a> {
 
     killers: [[Move; 2]; 64],
 
-    lmr_table: [[usize; 64]; 64], // Late Move Reductions (LMR) table
+    lmr_table: [[usize; 64]; 64],  // Late Move Reductions (LMR) table
+    history: [[[i32; 64]; 64]; 2], // History heuristics, [side][from][to]
 }
 
 impl<'a> Searcher<'a> {
@@ -33,6 +34,7 @@ impl<'a> Searcher<'a> {
             killers: [[Move::NULL_MOVE; 2]; 64], // Most beta cutoffs are caused by at most 2 moves per ply
 
             lmr_table: Self::init_lmr_table(),
+            history: [[[0; 64]; 64]; 2],
         }
     }
 
@@ -64,67 +66,76 @@ impl<'a> Searcher<'a> {
     fn search<const IS_PV: bool>(&mut self, depth: usize, ply: usize, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
+        let side = self.board.side_to_move();
+        let eval = self.board.evaluate_relative();
+        let in_check = self.board.king_in_check(side);
+
         // 1 - Target depth reached, quiescence search.
         if depth == 0 {
             return self.quiescence(ply, alpha, beta);
         }
 
-        // 2 - Generate all moves and score them.
+        // 2 - Futility pruning startup
+        let mut prune_quiet_moves = false;
+        if !IS_PV && depth <= 3 && !in_check && eval + 80 * depth as i32 <= alpha {
+            prune_quiet_moves = true;
+        }
+
+        // 3 - Generate all moves and score them.
         let mut moves = MoveList::new();
         let mut scores = [0i32; 256];
         generate_all_moves(self.board, &mut moves);
         self.score_moves::<false>(&moves, ply, &mut scores);
 
-        // 3 - Iterate over possible moves.
+        // 4 - Null move pruning
+        if !IS_PV && depth >= 3 && !in_check {
+            self.board.make_null_move();
+            let reduction = if depth > 6 { 3 } else { 2 };
+            let score = -self.search::<false>(depth - 1 - reduction, ply + 1, -beta, -beta + 1);
+            self.board.unmake_null_move();
+
+            if score >= beta {
+                return beta;
+            }
+        }
+
+        // 5 - Iterate over possible moves.
         let mut legal_move_count = 0; // Flag used for mate and stalemate detection
         for move_idx in 0..moves.count() {
             self.pick_best_move(&mut moves, &mut scores, move_idx);
             let m = moves.get(move_idx);
 
-            // 4 - Null move pruning
-            let in_check = self.board.king_in_check(self.board.side_to_move());
-            if !IS_PV && depth >= 3 && !in_check {
-                self.board.make_null_move();
-                let score = -self.search::<false>(depth - 1 - 2, ply + 1, -beta, -beta + 1);
-                self.board.unmake_null_move();
+            let (is_capture, is_promotion) = (m.is_capture(), m.is_promotion());
 
-                if score >= beta {
-                    return beta;
-                }
+            // 6 - Futility pruning
+            if !IS_PV && prune_quiet_moves && move_idx > 3 && !is_capture && !is_promotion {
+                continue;
             }
 
-            // 5 - Make move, undo and continue if illegal.
+            // 7 - Make move, undo and continue if illegal.
             self.board.make_move(m);
-            let in_check = self.board.king_in_check(!self.board.side_to_move());
+            let in_check = self.board.king_in_check(side);
             if in_check {
                 self.board.unmake_move(m);
                 continue;
             }
             legal_move_count += 1;
 
-            // 6 - Late Move Reductions
+            // 8 - Late Move Reductions
             let mut reduction = 0usize;
-            let gives_check = self.board.king_in_check(self.board.side_to_move());
-            if !IS_PV
-                && depth >= 3
-                && move_idx >= 3
-                && !m.is_capture()
-                && !m.is_promotion()
-                && !gives_check
-                && m != self.killers[ply][0]
-                && m != self.killers[ply][1]
-            {
+            let gives_check = self.board.king_in_check(!side);
+            if !IS_PV && depth >= 3 && move_idx >= 3 && !is_capture && !is_promotion && !gives_check && m != self.killers[ply][0] && m != self.killers[ply][1] {
                 reduction = self.lmr_table[depth.min(63)][move_idx.min(63)];
             }
-            let reduced_depth = depth.saturating_sub(reduction);
+            let reduced_depth = depth.saturating_sub(reduction + 1);
 
-            // 7 - Principal Variation Search (PVS): only search the first/best move with full window.
+            // 9 - Principal Variation Search (PVS): only search the first/best move with full window.
             let mut score: i32;
             if IS_PV {
                 if move_idx == 0 {
                     score = -self.search::<IS_PV>(depth - 1, ply + 1, -beta, -alpha); // Full window
                 } else {
-                    score = -self.search::<false>(reduced_depth - 1, ply + 1, -alpha - 1, -alpha); // Null window
+                    score = -self.search::<false>(reduced_depth, ply + 1, -alpha - 1, -alpha); // Null window
 
                     if score > alpha && beta - alpha > 1 {
                         score = -self.search::<false>(depth - 1, ply + 1, -beta, -alpha); // Fail high -> research
@@ -132,20 +143,22 @@ impl<'a> Searcher<'a> {
                 }
             } else {
                 // Non-PV node --> always null-window, no branch
-                score = -self.search::<false>(reduced_depth - 1, ply + 1, -alpha - 1, -alpha);
+                score = -self.search::<false>(reduced_depth, ply + 1, -alpha - 1, -alpha);
                 if score > alpha && beta - alpha > 1 {
                     score = -self.search::<false>(depth - 1, ply + 1, -beta, -alpha);
                 }
             }
 
-            // 8 - Unmake move
+            // 10 - Unmake move
             self.board.unmake_move(m);
 
-            // 9 - Update alpha, beta, and PV-table
+            // 11 - Update alpha, beta, PV-table and history
             if score >= beta {
-                if !m.is_capture() {
+                if !is_capture && !is_promotion {
                     self.killers[ply][1] = self.killers[ply][0];
-                    self.killers[ply][0] = m;
+                    self.killers[ply][0] = m; // At this depth, this move often refutes the position
+
+                    self.update_history(side, m.from(), m.to(), depth); // Globally, this move caused cutoffs
                 }
                 return beta; // Fail-high, beta cutoff
             }
@@ -164,12 +177,14 @@ impl<'a> Searcher<'a> {
                 if ply == 0 {
                     self.best_move = m;
                 }
+            } else if !is_capture {
+                self.history[side][m.from()][m.to()] -= (depth * depth) as i32; // Failed to improve alpha --> history malus
             }
         }
 
-        // 10 - Checkmate & stalemate detection
+        // 12 - Checkmate & stalemate detection
         if legal_move_count == 0 {
-            return if self.board.king_in_check(self.board.side_to_move()) {
+            return if self.board.king_in_check(side) {
                 -SCORE_MATE + (ply as i32) // Checkmate in N
             } else {
                 0 // Stalemate
@@ -246,22 +261,27 @@ impl<'a> Searcher<'a> {
             let attacker = self.board.piece_on_unchecked(m.from()).get_type();
             let victim = if m.is_enpassant() { PieceType::Pawn } else { self.board.piece_on_unchecked(m.to()).get_type() };
 
-            // Formula: (Victim * 100) - Attacker.
+            // Formula: 10_000 + (Victim * 100) - Attacker.
             // A Pawn (1) taking a Queen (5) = 900 - 1 = 899 (High priority)
             // A Queen (9) taking a Pawn (1) = 100 - 9 = 91 (Lower priority)
-            return (piece_value(victim) * 100) - piece_value(attacker);
+            // 10k is added so that captures scores better than a killer move (which is 9000).
+            return 10_000 + (piece_value(victim) * 100) - piece_value(attacker);
         }
 
-        // 3 - Killer moves
         if !QUIESCENCE {
+            // 3 - Killer moves
             if m == self.killers[ply][0] {
                 return 9000;
             } else if m == self.killers[ply][1] {
                 return 8000;
             }
+            // 4 - History heuristics
+            else {
+                return self.history[self.board.side_to_move()][m.from()][m.to()] >> 1; // Divided by 2 so that (0-16384) --> (0-8192)
+            }
         }
 
-        0 // Quiet moves
+        0
     }
 
     /// Picks the best move among the remaining ones (start_idx..last_idx) and places it at start_idx.
@@ -275,6 +295,15 @@ impl<'a> Searcher<'a> {
         }
         moves.swap(start_idx, best_idx);
         scores.swap(start_idx, best_idx);
+    }
+
+    /// Updates the history table when a move causes a beta cutoff. The used formula prevents overflow and slowly saturates to `HISTORY_MAX`.
+    #[inline(always)]
+    fn update_history(&mut self, side: Color, from: Square, to: Square, depth: usize) {
+        const HISTORY_MAX: i32 = 1 << 14; // Fast division by power of 2
+        let bonus = (depth * depth) as i32;
+        let entry = &mut self.history[side][from][to];
+        *entry += bonus - (*entry * bonus / HISTORY_MAX);
     }
 
     /// Initializes the Late Move Reduction (LMR) table.
