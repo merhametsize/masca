@@ -1,5 +1,5 @@
 use crate::board::Board;
-use crate::types::{Color, Piece, PieceKind, Square};
+use crate::types::{Color, PieceKind, Square};
 
 /// ================== PIECE-SQUARE TABLES - WHITE ==================
 // PAWN midgame
@@ -199,8 +199,8 @@ impl PieceSquareTables {
         let mg = mg as i16 as i32;
         let eg = eg as i16 as i32;
 
-        // Linear interpolation: score = (mg * phase + eg * (MAX_PHASE - phase)) / MAX_PHASE
-        ((mg * phase + eg * (MAX_PHASE - phase)) / MAX_PHASE)
+        // Linear interpolation
+        (mg * phase + eg * (MAX_PHASE - phase)) / MAX_PHASE
     }
 }
 

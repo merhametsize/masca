@@ -259,6 +259,20 @@ impl<'a> Searcher<'a> {
     /// Assigns a score to a specific move. Uses PV-table, MVV-LVA and killer move heuristics.
     #[inline(always)]
     fn score_move<const QUIESCENCE: bool>(&self, m: Move, ply: usize) -> i32 {
+        // Attacker index 0-5 (P, N, B, R, Q, K), Victim index 0-5
+        // MVV_LVA[victim][attacker] = 10000 + victim_value - attacker_value / 10
+        // 10k is added so that captures scores better than a killer move (which is 9000).
+        #[rustfmt::skip]
+        const MVV_LVA: [[i32; 6]; 6] = [
+            // Attacker:   P      N      B      R      Q      K
+            /* Pawn */   [10090, 10070, 10070, 10050, 10010, 9990],
+            /* Knight */ [10290, 10270, 10270, 10250, 10210, 10190],
+            /* Bishop */ [10290, 10270, 10270, 10250, 10210, 10190],
+            /* Rook */   [10490, 10470, 10470, 10450, 10410, 10390],
+            /* Queen */  [10890, 10870, 10870, 10850, 10810, 10790],
+            /* King */   [19990, 19970, 19970, 19950, 19910, 19890],
+        ];
+
         // 1 - PV Move gets highest priority
         if !QUIESCENCE && m == self.pv_table[ply][ply] {
             return 20000;
@@ -269,11 +283,7 @@ impl<'a> Searcher<'a> {
             let attacker = self.board.piece_on_unchecked(m.from()).kind();
             let victim = if m.is_enpassant() { PieceKind::Pawn } else { self.board.piece_on_unchecked(m.to()).kind() };
 
-            // Formula: 10_000 + (Victim * 100) - Attacker.
-            // A Pawn (1) taking a Queen (5) = 900 - 1 = 899 (High priority)
-            // A Queen (9) taking a Pawn (1) = 100 - 9 = 91 (Lower priority)
-            // 10k is added so that captures scores better than a killer move (which is 9000).
-            return 10_000 + (Self::piece_value(victim) * 100) - Self::piece_value(attacker);
+            return MVV_LVA[victim][attacker];
         }
 
         if !QUIESCENCE {
@@ -290,19 +300,6 @@ impl<'a> Searcher<'a> {
         }
 
         0
-    }
-
-    /// Returns the value of a piece for move ordering. Should be optimized by the compiler.
-    #[inline(always)]
-    fn piece_value(piece_type: PieceKind) -> i32 {
-        match piece_type {
-            PieceKind::Pawn => 100,
-            PieceKind::Knight => 320,
-            PieceKind::Bishop => 330,
-            PieceKind::Rook => 500,
-            PieceKind::Queen => 900,
-            PieceKind::King => 0, // Dummy
-        }
     }
 
     /// Picks the best move among the remaining ones (start_idx..last_idx) and places it at start_idx.
