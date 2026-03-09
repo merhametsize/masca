@@ -5,9 +5,9 @@
 
 use crate::attack::AttackTables;
 use crate::bitboard::Bitboard;
-use crate::eval;
+use crate::eval::{self, PieceSquareTables};
 use crate::moves::Move;
-use crate::types::{Color, Piece, PieceType, Square, piece_value};
+use crate::types::{Color, Piece, PieceKind, Square};
 
 const MAX_PLY: usize = 128;
 
@@ -23,13 +23,14 @@ pub const BQ: u8 = 0b1000;
 /// It also owns a stack of incremental states used to undo moves efficiently.
 pub struct Board {
     mailbox: [Option<Piece>; 64],       // Piece-centric redundant representation
-    pieces: [Bitboard; PieceType::NUM], // p,n,b,r,q,k, color agnostic
+    pieces: [Bitboard; PieceKind::NUM], // p,n,b,r,q,k, color agnostic
     colors: [Bitboard; 2],              // Per-color occupancy
     side_to_move: Color,
 
     state_stack: [State; MAX_PLY], // Array of states for move unmake
     state_idx: usize,
 
+    psqt: PieceSquareTables,
     pub attack_tables: AttackTables,
 }
 
@@ -46,6 +47,7 @@ pub struct State {
 
     phase: i32,
     eval: i32, // Cached static evaluation score
+    #[allow(dead_code)]
     pst_score: i32,
 
     #[allow(dead_code)]
@@ -57,75 +59,109 @@ impl Board {
         Self::default()
     }
 
-    /// Makes a pseudo-legal move incrementally.
+    #[inline(always)]
+    fn add_piece(&mut self, piece: Piece, sq: Square) {
+        let color = piece.color();
+        let piece_kind = piece.kind();
+        let state = &mut self.state_stack[self.state_idx];
+        let phase = state.phase;
+
+        self.mailbox[sq] = Some(piece);
+        self.pieces[piece_kind] ^= sq.bb();
+        self.colors[color] ^= sq.bb();
+        state.phase += eval::phase_weight(piece_kind);
+        state.eval += self.psqt.probe(color, piece_kind, sq, phase);
+    }
+
+    #[inline(always)]
+    fn remove_piece(&mut self, piece: Piece, sq: Square) {
+        let color = piece.color();
+        let piece_kind = piece.kind();
+        let state = &mut self.state_stack[self.state_idx];
+        let phase = state.phase;
+
+        self.mailbox[sq] = None;
+        self.pieces[piece_kind] ^= sq.bb();
+        self.colors[color] ^= sq.bb();
+        state.phase -= eval::phase_weight(piece_kind);
+        state.eval -= self.psqt.probe(color, piece_kind, sq, phase);
+    }
+
+    #[inline(always)]
+    fn move_piece(&mut self, piece: Piece, from: Square, to: Square) {
+        let state = &mut self.state_stack[self.state_idx];
+        let color = piece.color();
+        let piece_kind = piece.kind();
+        let phase = state.phase;
+
+        self.mailbox[from] = None;
+        self.mailbox[to] = Some(piece);
+
+        self.pieces[piece_kind] ^= from.bb() | to.bb();
+        self.colors[color] ^= from.bb() | to.bb();
+
+        state.eval += self.psqt.probe(color, piece_kind, to, phase) - self.psqt.probe(color, piece_kind, from, phase);
+    }
+
+    #[inline(always)]
+    fn store_capture(&mut self, captured: Piece) {
+        let state = &mut self.state_stack[self.state_idx];
+        state.captured = Some(captured);
+    }
+
+    /// Makes a pseudo-legal move.
     ///
     /// Does NOT check legality (king safety). Must be paired with `unmake_move`.
     pub fn make_move(&mut self, m: Move) {
         let (from, to) = (m.from(), m.to());
         let (us, them) = (self.side_to_move, !self.side_to_move);
 
-        // 1 - Prepare state change variables
-        let old_state = &mut self.state_stack[self.state_idx];
-        let new_state = &mut self.state_stack[self.state_idx + 1];
-        *new_state = *old_state;
-        new_state.en_passant = None;
-        new_state.captured = None;
-        new_state.halfmove += 1;
+        self.forward_state();
 
-        // 2 - Remove from origin
+        // ------------------------------------
+        // 1 -     Remove from origin
+        // ------------------------------------
         debug_assert!(self.mailbox[from].is_some()); // There must be a piece in the origin square
         let moved_piece = self.piece_on_unchecked(from);
-        let moved_type = moved_piece.get_type();
-        self.mailbox[from] = None;
-        self.pieces[moved_type] ^= from.bb();
-        self.colors[us] ^= from.bb();
+        let moved_type = moved_piece.kind();
+        self.remove_piece(moved_piece, from);
 
-        // 3 - Handle capture
+        // ------------------------------------
+        // 2 - Remove captured piece, if any
+        // ------------------------------------
         if m.is_enpassant() {
             let captured_sq = if us == Color::White { to.south() } else { to.north() };
-            let captured_piece = self.piece_on_unchecked(captured_sq);
-
-            self.mailbox[captured_sq] = None;
-            self.pieces[PieceType::Pawn] ^= captured_sq.bb();
-            self.colors[them] ^= captured_sq.bb();
-
-            new_state.captured = Some(captured_piece);
-            self.apply_material_delta(captured_piece, -1); // Update eval metrics
-            self.pst_remove_piece(captured_piece, captured_sq);
+            let captured_piece = Piece::new(them, PieceKind::Pawn);
+            self.remove_piece(captured_piece, captured_sq);
+            self.store_capture(captured_piece);
         } else if m.is_capture() {
             debug_assert!(self.mailbox[to].is_some()); // There must be a piece in the destination square
             let captured_piece = self.piece_on_unchecked(to);
-            self.pieces[captured_piece.get_type()] ^= to.bb();
-            self.colors[them] ^= to.bb();
-
-            new_state.captured = Some(captured_piece);
-            self.apply_material_delta(captured_piece, -1); // Update eval metrics
-            self.pst_remove_piece(captured_piece, to);
-        }
-        if moved_type == PieceType::Pawn || m.is_capture() {
-            new_state.halfmove = 0;
+            self.remove_piece(captured_piece, to);
+            self.store_capture(captured_piece);
         }
 
-        // 4 - Handle destination square
+        // ------------------------------------
+        // 3 -    Reset halfmove count
+        // ------------------------------------
+        if moved_type == PieceKind::Pawn || m.is_capture() {
+            self.state_stack[self.state_idx].halfmove = 0;
+        }
+
+        // ------------------------------------
+        // 4 - Place piece on destination
+        // ------------------------------------
         if m.is_promotion() {
             let promoted_type = m.promotion_piece();
             let promoted_piece = Piece::new(us, promoted_type);
-            let moved_pawn = Piece::new(us, PieceType::Pawn);
-
-            self.mailbox[to] = Some(promoted_piece);
-            self.pieces[promoted_type] ^= to.bb();
-
-            self.apply_material_delta(moved_pawn, -1); // Update eval metrics
-            self.apply_material_delta(promoted_piece, 1);
-            self.pst_add_piece(promoted_piece, to);
+            self.add_piece(promoted_piece, to); // Yaaaaas queeeeen!
         } else {
-            self.mailbox[to] = Some(moved_piece); // Capture or quiet
-            self.pieces[moved_type] ^= to.bb();
-            self.pst_move_piece(moved_piece, from, to); // Update eval metrics
+            self.add_piece(moved_piece, to); // Add the moved piece if quiet or capture
         }
-        self.colors[us] ^= to.bb();
 
-        // 5 - Castling
+        // ------------------------------------
+        // 5 -          Castling
+        // ------------------------------------
         if m.is_castling() {
             let (rook_from, rook_to) = match to {
                 Square::G1 => (Square::H1, Square::F1),
@@ -136,42 +172,38 @@ impl Board {
             };
 
             let rook = self.piece_on_unchecked(rook_from);
-            debug_assert!(rook.get_type() == PieceType::Rook);
-
-            self.mailbox[rook_from] = None;
-            self.mailbox[rook_to] = Some(rook);
-
-            self.pieces[PieceType::Rook] ^= rook_from.bb() | rook_to.bb();
-            self.colors[us] ^= rook_from.bb() | rook_to.bb();
-
-            self.pst_move_piece(rook, rook_from, rook_to); // Update eval metrics
+            debug_assert!(rook.kind() == PieceKind::Rook);
+            self.move_piece(rook, rook_from, rook_to);
         }
 
+        // ---------------------------------------
         // 6 - Update castling rights (branchless)
+        // ---------------------------------------
         let mut castling_mask: u8 = 0xFF; // Default: no change
         castling_mask &= !((from == Square::E1) as u8 * (WK | WQ)); // White king move
         castling_mask &= !((from == Square::E8) as u8 * (BK | BQ)); // Black king move
-        castling_mask &= !((from == Square::H1 || to == Square::H1) as u8 * WK); // Rook move or capture
-        castling_mask &= !((from == Square::A1 || to == Square::A1) as u8 * WQ);
-        castling_mask &= !((from == Square::H8 || to == Square::H8) as u8 * BK);
-        castling_mask &= !((from == Square::A8 || to == Square::A8) as u8 * BQ);
-        new_state.castling &= castling_mask;
+        castling_mask &= !((from == Square::H1 || to == Square::H1) as u8 * WK); // Rook moves or is captured
+        castling_mask &= !((from == Square::A1 || to == Square::A1) as u8 * WQ); // Rook moves or is captured
+        castling_mask &= !((from == Square::H8 || to == Square::H8) as u8 * BK); // Rook moves or is captured
+        castling_mask &= !((from == Square::A8 || to == Square::A8) as u8 * BQ); // Rook moves or is captured
+        self.state_stack[self.state_idx].castling &= castling_mask;
 
-        // 7 - Handle double push
+        // ---------------------------------------
+        // 7 -    En passant activation
+        // ---------------------------------------
         if m.is_double_push() {
             let ep_sq = if us == Color::White { to.south() } else { to.north() };
-            new_state.en_passant = Some(ep_sq);
+            self.state_stack[self.state_idx].en_passant = Some(ep_sq);
         }
 
-        // 8 - Update zobrist
+        // ---------------------------------------
+        // 8 -     Update zobrist key
+        // ---------------------------------------
         //TODO
 
-        // 9 - Push new state
-        self.state_idx += 1;
-        self.state_stack[self.state_idx] = new_state;
-        debug_assert!(self.state_idx < MAX_PLY);
-
-        // 10 - Flip side
+        // ---------------------------------------
+        // 9 -           Flip side
+        // ---------------------------------------
         self.side_to_move = !self.side_to_move;
     }
 
@@ -188,24 +220,25 @@ impl Board {
         let (us, them) = (self.side_to_move, !self.side_to_move);
 
         // 2 - Undo destination square
-        self.pieces[moved_piece.get_type()] ^= to.bb();
+        self.pieces[moved_piece.kind()] ^= to.bb();
         self.colors[us] ^= to.bb();
         self.mailbox[to] = None;
 
         // 3 - Restore captured piece
         if let Some(captured) = state.captured {
-            let captured_sq = if m.is_enpassant() { if us == Color::White { to.south() } else { to.north() } } else { to };
+            let captured_sq =
+                if m.is_enpassant() { if us == Color::White { to.south() } else { to.north() } } else { to };
             self.mailbox[captured_sq] = Some(captured);
-            self.pieces[captured.get_type()] ^= captured_sq.bb();
+            self.pieces[captured.kind()] ^= captured_sq.bb();
             self.colors[them] ^= captured_sq.bb();
         }
 
         // 4 - Restore origin square
         if m.is_promotion() {
-            moved_piece = Piece::new(us, PieceType::Pawn); // Moved piece "becomes" a pawn
+            moved_piece = Piece::new(us, PieceKind::Pawn); // Moved piece "becomes" a pawn
         }
         self.mailbox[from] = Some(moved_piece);
-        self.pieces[moved_piece.get_type()] ^= from.bb();
+        self.pieces[moved_piece.kind()] ^= from.bb();
         self.colors[us] ^= from.bb();
 
         // 5 - Undo castling
@@ -220,12 +253,26 @@ impl Board {
             let rook = self.piece_on_unchecked(rook_to);
             self.mailbox[rook_to] = None;
             self.mailbox[rook_from] = Some(rook);
-            self.pieces[PieceType::Rook] ^= rook_from.bb() | rook_to.bb();
+            self.pieces[PieceKind::Rook] ^= rook_from.bb() | rook_to.bb();
             self.colors[us] ^= rook_from.bb() | rook_to.bb();
         }
 
         // 6 - Pop state
         self.state_idx -= 1;
+    }
+
+    /// Propagates the state forward, by copying certain fields and resetting others.
+    #[inline(always)]
+    fn forward_state(&mut self) {
+        let old = self.state_stack[self.state_idx];
+        self.state_idx += 1;
+        debug_assert!(self.state_idx < MAX_PLY);
+        let new = &mut self.state_stack[self.state_idx];
+
+        *new = old;
+        new.en_passant = None;
+        new.halfmove += 1;
+        new.captured = None;
     }
 
     /// Makes a null move, used for null-move pruning.
@@ -246,45 +293,6 @@ impl Board {
         self.state_idx -= 1;
     }
 
-    /// Updates the incremental material metrics stored in Board.
-    #[inline(always)]
-    fn apply_material_delta(&mut self, piece: Piece, delta: i32) {
-        debug_assert!(delta == 1 || delta == -1);
-        let state = &mut self.state_stack[self.state_idx];
-        let (piece_type, color) = (piece.get_type(), piece.get_color());
-
-        let sign = 1 - ((color as i32) << 1); // Branchless
-        state.eval += piece_value(piece_type) * delta * sign;
-        state.phase += eval::phase_weight(piece_type) * delta;
-    }
-
-    /// Updates the incremental Piece-Square Tables metrics stored in Board. Quiet move.
-    #[inline(always)]
-    fn pst_move_piece(&mut self, piece: Piece, from: Square, to: Square) {
-        let state = &mut self.state_stack[self.state_idx];
-        let phase = state.phase;
-
-        state.pst_score += eval::pst_delta_quiet(piece, from, to, phase);
-    }
-
-    /// Updates the incremental Piece-Square Tables metrics stored in Board. Promotion.
-    #[inline(always)]
-    fn pst_add_piece(&mut self, piece: Piece, sq: Square) {
-        let state = &mut self.state_stack[self.state_idx];
-        let phase = state.phase;
-
-        state.pst_score += eval::pst_delta_promotion(piece, sq, phase);
-    }
-
-    /// Updates the incremental Piece-Square Tables metrics stored in Board. Capture.
-    #[inline(always)]
-    fn pst_remove_piece(&mut self, piece: Piece, sq: Square) {
-        let state = &mut self.state_stack[self.state_idx];
-        let phase = state.phase;
-
-        state.pst_score += eval::pst_delta_capture(piece, sq, phase);
-    }
-
     /// Returns color-relative static evaluation of the position.
     #[inline(always)]
     pub fn evaluate_relative(&mut self) -> i32 {
@@ -298,7 +306,7 @@ impl Board {
     ///
     /// Locates king square and calls `is_square_attacked`.
     pub fn king_in_check(&self, color: Color) -> bool {
-        let king_bb = self.pieces[PieceType::King] & self.colors[color];
+        let king_bb = self.pieces[PieceKind::King] & self.colors[color];
         debug_assert!(king_bb != Bitboard(0));
 
         let king_sq = Square::new(king_bb.lsb() as u8);
@@ -314,17 +322,17 @@ impl Board {
         let attack_tables = &self.attack_tables;
 
         // Pawn attacks
-        if attack_tables.pawn_capture[!by][sq] & (self.pieces[PieceType::Pawn] & their_pieces) != Bitboard(0) {
+        if attack_tables.pawn_capture[!by][sq] & (self.pieces[PieceKind::Pawn] & their_pieces) != Bitboard(0) {
             return true;
         }
 
         // Knight attacks
-        if attack_tables.knight[sq] & (self.piece(PieceType::Knight) & their_pieces) != Bitboard(0) {
+        if attack_tables.knight[sq] & (self.piece(PieceKind::Knight) & their_pieces) != Bitboard(0) {
             return true;
         }
 
         // King attacks
-        if attack_tables.king[sq] & (self.piece(PieceType::King) & their_pieces) != Bitboard(0) {
+        if attack_tables.king[sq] & (self.piece(PieceKind::King) & their_pieces) != Bitboard(0) {
             return true;
         }
 
@@ -337,7 +345,8 @@ impl Board {
             let idx = ((relevant.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
             let attacks = mt.bishop_attacks[mt.bishop_offsets[sq] + idx];
 
-            if attacks & ((self.piece(PieceType::Bishop) | self.piece(PieceType::Queen)) & their_pieces) != Bitboard(0) {
+            if attacks & ((self.piece(PieceKind::Bishop) | self.piece(PieceKind::Queen)) & their_pieces) != Bitboard(0)
+            {
                 return true;
             }
         }
@@ -351,7 +360,7 @@ impl Board {
             let idx = ((relevant.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
             let attacks = mt.rook_attacks[mt.rook_offsets[sq] + idx];
 
-            if attacks & ((self.piece(PieceType::Rook) | self.piece(PieceType::Queen)) & their_pieces) != Bitboard(0) {
+            if attacks & ((self.piece(PieceKind::Rook) | self.piece(PieceKind::Queen)) & their_pieces) != Bitboard(0) {
                 return true;
             }
         }
@@ -361,7 +370,7 @@ impl Board {
 
     /// Returns a specific bitboard from `self.pieces`.
     #[inline(always)]
-    pub fn piece(&self, piece_type: PieceType) -> Bitboard {
+    pub fn piece(&self, piece_type: PieceKind) -> Bitboard {
         self.pieces[piece_type as usize]
     }
 
@@ -424,6 +433,7 @@ impl Board {
         let en_passant_part = parts.next().unwrap_or("-");
         let halfmove_part = parts.next().unwrap_or("0");
         let _ = parts.next().unwrap_or("1"); //fullmove
+        let mut evaluation: i32 = 0;
 
         //Reset board
         self.mailbox.fill(Option::None);
@@ -445,13 +455,15 @@ impl Board {
                     let piece = Piece::from_char(ch);
                     self.mailbox[sq] = Some(piece);
 
-                    let color = piece.get_color();
-                    let ptype = piece.get_type();
+                    let color = piece.color();
+                    let ptype = piece.kind();
                     let sq_bb = Square::new(sq as u8).bb();
                     self.pieces[ptype] |= sq_bb;
                     self.colors[color] |= sq_bb;
 
-                    self.apply_material_delta(piece, 1);
+                    let (piece_type, color) = (piece.kind(), piece.color());
+                    let sign = 1 - ((color as i32) << 1); // Branchless
+                    evaluation += eval::piece_value_midgame(piece_type) * 1 * sign;
 
                     file += 1;
                 }
@@ -500,7 +512,7 @@ impl Board {
             en_passant,
             halfmove: halfmove_part.parse().unwrap_or_default(),
             captured: Option::None,
-            eval: 0,
+            eval: evaluation,
             phase: eval::compute_game_phase(&self),
             pst_score: 0,
             zobrist: Bitboard(0),
@@ -535,13 +547,14 @@ impl Default for Board {
     fn default() -> Self {
         Self {
             mailbox: [Option::None; 64],
-            pieces: [Bitboard(0); PieceType::NUM],
+            pieces: [Bitboard(0); PieceKind::NUM],
             colors: [Bitboard(0); 2],
             side_to_move: Color::White,
 
             state_stack: [State::default(); MAX_PLY],
             state_idx: 0,
 
+            psqt: PieceSquareTables::new(),
             attack_tables: AttackTables::new(),
         }
     }

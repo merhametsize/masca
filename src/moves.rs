@@ -4,7 +4,7 @@
 
 use std::fmt;
 
-use crate::types::{PieceType, Square};
+use crate::types::{PieceKind, Square};
 
 /// 16-bit encoded move.
 /// 0-5: from square (0 to 63)
@@ -115,13 +115,13 @@ impl Move {
 
     /// Returns the piece you get after a pawn promotion.
     #[inline(always)]
-    pub const fn promotion_piece(self) -> PieceType {
+    pub const fn promotion_piece(self) -> PieceKind {
         debug_assert!(self.is_promotion());
         match (self.encoding >> 12) & 0b11 {
-            0 => PieceType::Knight,
-            1 => PieceType::Bishop,
-            2 => PieceType::Rook,
-            3 => PieceType::Queen,
+            0 => PieceKind::Knight,
+            1 => PieceKind::Bishop,
+            2 => PieceKind::Rook,
+            3 => PieceKind::Queen,
             _ => unreachable!(),
         }
     }
@@ -138,10 +138,10 @@ impl fmt::Display for Move {
         // 3. Handle Promotion suffix
         if self.is_promotion() {
             let promo_char = match self.promotion_piece() {
-                PieceType::Knight => 'n',
-                PieceType::Bishop => 'b',
-                PieceType::Rook => 'r',
-                PieceType::Queen => 'q',
+                PieceKind::Knight => 'n',
+                PieceKind::Bishop => 'b',
+                PieceKind::Rook => 'r',
+                PieceKind::Queen => 'q',
                 _ => ' ',
             };
             write!(f, "{}", promo_char)?;

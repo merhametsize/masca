@@ -164,7 +164,7 @@ impl<T> IndexMut<Square> for [T] {
 
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub enum PieceType {
+pub enum PieceKind {
     Pawn = 0,
     Knight,
     Bishop,
@@ -173,11 +173,12 @@ pub enum PieceType {
     King,
 }
 
-impl PieceType {
+impl PieceKind {
     pub const NUM: usize = 6;
-    pub const ALL: [PieceType; 6] = [PieceType::Pawn, PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen, PieceType::King];
+    pub const ALL: [PieceKind; 6] =
+        [PieceKind::Pawn, PieceKind::Knight, PieceKind::Bishop, PieceKind::Rook, PieceKind::Queen, PieceKind::King];
 
-    pub fn new(encoding: u8) -> PieceType {
+    pub fn new(encoding: u8) -> PieceKind {
         debug_assert!(encoding < Self::NUM as u8);
         unsafe { core::mem::transmute(encoding) }
     }
@@ -185,28 +186,15 @@ impl PieceType {
 
 /// Allows for array indexing without explicit conversion of Color to usize.
 /// Example: `array[PieceType::YaasssQueeeeeen]`
-impl<T> Index<PieceType> for [T] {
+impl<T> Index<PieceKind> for [T] {
     type Output = T;
-    fn index(&self, index: PieceType) -> &Self::Output {
+    fn index(&self, index: PieceKind) -> &Self::Output {
         unsafe { self.get_unchecked(index as usize) }
     }
 }
-impl<T> IndexMut<PieceType> for [T] {
-    fn index_mut(&mut self, index: PieceType) -> &mut Self::Output {
+impl<T> IndexMut<PieceKind> for [T] {
+    fn index_mut(&mut self, index: PieceKind) -> &mut Self::Output {
         unsafe { self.get_unchecked_mut(index as usize) }
-    }
-}
-
-/// Returns the value of a piece for static evaluation. Should be optimized by the compiler.
-#[inline(always)]
-pub fn piece_value(piece_type: PieceType) -> i32 {
-    match piece_type {
-        PieceType::Pawn => 100,
-        PieceType::Knight => 320,
-        PieceType::Bishop => 330,
-        PieceType::Rook => 500,
-        PieceType::Queen => 900,
-        PieceType::King => 0, // Dummy
     }
 }
 
@@ -233,7 +221,7 @@ pub enum Piece {
 impl Piece {
     /// Builds a Piece from a Color and a PieceType.
     #[inline(always)]
-    pub const fn new(color: Color, piece_type: PieceType) -> Self {
+    pub const fn new(color: Color, piece_type: PieceKind) -> Self {
         let encoding = (color as u8) * 6 + (piece_type as u8);
         debug_assert!(encoding < 12);
         unsafe { core::mem::transmute(encoding) }
@@ -241,7 +229,7 @@ impl Piece {
 
     /// Returns the color of the piece.
     #[inline(always)]
-    pub const fn get_color(self) -> Color {
+    pub const fn color(self) -> Color {
         let color_index = (self as u8) / 6;
         debug_assert!(color_index <= 1);
         unsafe { core::mem::transmute(color_index) }
@@ -249,14 +237,14 @@ impl Piece {
 
     /// Makes the enum self-aware, returns the piece-type.
     #[inline(always)]
-    pub const fn get_type(self) -> PieceType {
+    pub const fn kind(self) -> PieceKind {
         match (self as u8) % 6 {
-            0 => PieceType::Pawn,
-            1 => PieceType::Knight,
-            2 => PieceType::Bishop,
-            3 => PieceType::Rook,
-            4 => PieceType::Queen,
-            5 => PieceType::King,
+            0 => PieceKind::Pawn,
+            1 => PieceKind::Knight,
+            2 => PieceKind::Bishop,
+            3 => PieceKind::Rook,
+            4 => PieceKind::Queen,
+            5 => PieceKind::King,
             _ => unreachable!(), // optional safety
         }
     }

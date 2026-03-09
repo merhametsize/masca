@@ -1,7 +1,7 @@
 use crate::board::Board;
 use crate::movegen::{MoveList, generate_all_captures, generate_all_moves};
 use crate::moves::Move;
-use crate::types::{Color, PieceType, Square, piece_value};
+use crate::types::{Color, PieceKind, Square};
 
 const SCORE_INF: i32 = 32_000;
 const SCORE_MATE: i32 = 29_000;
@@ -124,7 +124,15 @@ impl<'a> Searcher<'a> {
             // 8 - Late Move Reductions
             let mut reduction = 0usize;
             let gives_check = self.board.king_in_check(!side);
-            if !IS_PV && depth >= 3 && move_idx >= 3 && !is_capture && !is_promotion && !gives_check && m != self.killers[ply][0] && m != self.killers[ply][1] {
+            if !IS_PV
+                && depth >= 3
+                && move_idx >= 3
+                && !is_capture
+                && !is_promotion
+                && !gives_check
+                && m != self.killers[ply][0]
+                && m != self.killers[ply][1]
+            {
                 reduction = self.lmr_table[depth.min(63)][move_idx.min(63)];
             }
             let reduced_depth = depth.saturating_sub(reduction + 1);
@@ -258,14 +266,14 @@ impl<'a> Searcher<'a> {
 
         // 2 - Captures, MVV-LVA (most valuable victim - least valuable attacker)
         if m.is_capture() || m.is_enpassant() {
-            let attacker = self.board.piece_on_unchecked(m.from()).get_type();
-            let victim = if m.is_enpassant() { PieceType::Pawn } else { self.board.piece_on_unchecked(m.to()).get_type() };
+            let attacker = self.board.piece_on_unchecked(m.from()).kind();
+            let victim = if m.is_enpassant() { PieceKind::Pawn } else { self.board.piece_on_unchecked(m.to()).kind() };
 
             // Formula: 10_000 + (Victim * 100) - Attacker.
             // A Pawn (1) taking a Queen (5) = 900 - 1 = 899 (High priority)
             // A Queen (9) taking a Pawn (1) = 100 - 9 = 91 (Lower priority)
             // 10k is added so that captures scores better than a killer move (which is 9000).
-            return 10_000 + (piece_value(victim) * 100) - piece_value(attacker);
+            return 10_000 + (Self::piece_value(victim) * 100) - Self::piece_value(attacker);
         }
 
         if !QUIESCENCE {
@@ -282,6 +290,19 @@ impl<'a> Searcher<'a> {
         }
 
         0
+    }
+
+    /// Returns the value of a piece for move ordering. Should be optimized by the compiler.
+    #[inline(always)]
+    fn piece_value(piece_type: PieceKind) -> i32 {
+        match piece_type {
+            PieceKind::Pawn => 100,
+            PieceKind::Knight => 320,
+            PieceKind::Bishop => 330,
+            PieceKind::Rook => 500,
+            PieceKind::Queen => 900,
+            PieceKind::King => 0, // Dummy
+        }
     }
 
     /// Picks the best move among the remaining ones (start_idx..last_idx) and places it at start_idx.

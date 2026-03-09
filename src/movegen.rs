@@ -9,7 +9,7 @@
 use crate::bitboard::Bitboard;
 use crate::board::{BK, BQ, Board, WK, WQ};
 use crate::moves::{Move, MoveKind};
-use crate::types::{Color, PieceType, Square};
+use crate::types::{Color, PieceKind, Square};
 
 /// Container for moves generated for a position.
 ///
@@ -62,14 +62,14 @@ impl MoveList {
 /// Generic over `P: Attacker` allows compile-time specialization and zero-cost abstraction.
 /// `TYPE` is the corresponding `PieceType`.
 pub trait Attacker {
-    const TYPE: PieceType;
+    const TYPE: PieceKind;
     fn get_attacks(from: Square, board: &Board) -> Bitboard;
 }
 
 /// Knight move generation. "Caval" means horse in Piedmontese.
 pub struct Caval;
 impl Attacker for Caval {
-    const TYPE: PieceType = PieceType::Knight;
+    const TYPE: PieceKind = PieceKind::Knight;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board) -> Bitboard {
@@ -80,7 +80,7 @@ impl Attacker for Caval {
 /// King move generation. "Re" means king in piedmontese.
 pub struct Re;
 impl Attacker for Re {
-    const TYPE: PieceType = PieceType::King;
+    const TYPE: PieceKind = PieceKind::King;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board) -> Bitboard {
@@ -96,7 +96,7 @@ impl Attacker for Re {
 /// "Tor" means tower in piedmontese.
 pub struct Tor;
 impl Attacker for Tor {
-    const TYPE: PieceType = PieceType::Rook;
+    const TYPE: PieceKind = PieceKind::Rook;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board) -> Bitboard {
@@ -126,7 +126,7 @@ impl Attacker for Tor {
 /// "Alfè" means standard-bearer in Piedmontese.
 pub struct Alfè;
 impl Attacker for Alfè {
-    const TYPE: PieceType = PieceType::Bishop;
+    const TYPE: PieceKind = PieceKind::Bishop;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board) -> Bitboard {
@@ -146,7 +146,7 @@ impl Attacker for Alfè {
 /// "Argina" means queen in Piedmontese.
 pub struct Argina;
 impl Attacker for Argina {
-    const TYPE: PieceType = PieceType::Queen;
+    const TYPE: PieceKind = PieceKind::Queen;
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board) -> Bitboard {
@@ -273,7 +273,7 @@ pub fn generate_moves<P: Attacker, const WHITE: bool, const CAPTURE: bool>(board
 #[inline(always)]
 pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, moves: &mut MoveList) {
     let our_color = if WHITE { Color::White } else { Color::Black };
-    let mut pawns = board.piece(PieceType::Pawn) & board.color(our_color);
+    let mut pawns = board.piece(PieceKind::Pawn) & board.color(our_color);
 
     let them = if WHITE { board.color(Color::Black) } else { board.color(Color::White) };
     let promotion_rank = if WHITE { Bitboard(0xFF00000000000000u64) } else { Bitboard(0x00000000000000FFu64) };
@@ -315,7 +315,7 @@ pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, moves: &mut Move
 #[inline(always)]
 pub fn generate_pawn_quiets<const WHITE: bool>(board: &Board, moves: &mut MoveList) {
     let our_color = if WHITE { Color::White } else { Color::Black };
-    let mut pawns = board.piece(PieceType::Pawn) & board.color(our_color);
+    let mut pawns = board.piece(PieceKind::Pawn) & board.color(our_color);
 
     let pawn_pushes = &board.attack_tables.pawn_push[our_color];
     let pawn_double = &board.attack_tables.pawn_double_push[our_color];
