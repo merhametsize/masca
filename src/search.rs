@@ -260,17 +260,17 @@ impl<'a> Searcher<'a> {
     #[inline(always)]
     fn score_move<const QUIESCENCE: bool>(&self, m: Move, ply: usize) -> i32 {
         // Attacker index 0-5 (P, N, B, R, Q, K), Victim index 0-5
-        // MVV_LVA[victim][attacker] = 10000 + victim_value - attacker_value / 10
+        // MVV_LVA[attacker][victim] = 10000 + (victim+1)*100 - attacker
         // 10k is added so that captures scores better than a killer move (which is 9000).
         #[rustfmt::skip]
-        const MVV_LVA: [[i32; 6]; 6] = [
-            // Attacker:   P      N      B      R      Q      K
-            /* Pawn */   [10090, 10070, 10070, 10050, 10010, 9990],
-            /* Knight */ [10290, 10270, 10270, 10250, 10210, 10190],
-            /* Bishop */ [10290, 10270, 10270, 10250, 10210, 10190],
-            /* Rook */   [10490, 10470, 10470, 10450, 10410, 10390],
-            /* Queen */  [10890, 10870, 10870, 10850, 10810, 10790],
-            /* King */   [19990, 19970, 19970, 19950, 19910, 19890],
+        pub const MVV_LVA: [[i32; 6]; 6] = [
+            // victim:   P      N      B      R      Q      K
+            /* P */ [10000, 10100, 10200, 10300, 10400, 10500],
+            /* N */ [9999, 10099, 10199, 10299, 10399, 10499],
+            /* B */ [9998, 10098, 10198, 10298, 10398, 10498],
+            /* R */ [9997, 10097, 10197, 10297, 10397, 10497],
+            /* Q */ [9996, 10096, 10196, 10296, 10396, 10496],
+            /* K */ [9995, 10095, 10195, 10295, 10395, 10495],
         ];
 
         // 1 - PV Move gets highest priority
@@ -283,7 +283,7 @@ impl<'a> Searcher<'a> {
             let attacker = self.board.piece_on_unchecked(m.from()).kind();
             let victim = if m.is_enpassant() { PieceKind::Pawn } else { self.board.piece_on_unchecked(m.to()).kind() };
 
-            return MVV_LVA[victim][attacker];
+            return MVV_LVA[attacker][victim];
         }
 
         if !QUIESCENCE {
