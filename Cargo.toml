@@ -6,9 +6,6 @@ edition = "2024"
 [dependencies]
 rand = "0.9"
 
-[build]
-rustflags = ["-C", "target-cpu=native"]
-
 # DEBUG BUILD  (cargo build / cargo run)
 [profile.dev]
 opt-level = 0

@@ -12,7 +12,7 @@ pub struct Searcher<'a> {
 
     best_move: Move,
     nodes: u64,
-    move_pool: [MoveList; MAX_PLY],
+    move_pool: [MoveList; MAX_PLY], // MoveLists are reset and overwritten at every search() call
 
     pv_table: [[Move; 64]; 64],
     pv_length: [usize; 64],
