@@ -41,8 +41,8 @@ const BOH: &str = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
 fn main() {
     //benchmark_perft(6);
     let mut board = Board::new();
-    board.from_fen(BOH).unwrap();
-    //board.set_startpos();
+    //board.from_fen(BOH).unwrap();
+    board.set_startpos();
     board.print();
 
     let mut searcher = Searcher::new(&mut board);

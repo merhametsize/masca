@@ -11,8 +11,6 @@ use crate::board::{BK, BQ, Board, WK, WQ};
 use crate::moves::{Move, MoveKind};
 use crate::types::{Color, PieceKind, Square};
 
-use std::mem::MaybeUninit;
-
 const MAX_MOVES: usize = 256;
 
 /// Container for moves generated for a position.
@@ -21,14 +19,14 @@ const MAX_MOVES: usize = 256;
 /// Use `push()` to add moves in the inner loops of move generation.
 #[derive(Copy, Clone)]
 pub struct MoveList {
-    moves: [MaybeUninit<Move>; MAX_MOVES], // Uninitialized for better performance
+    moves: [Move; MAX_MOVES], // Uninitialized for better performance
     count: usize,
 }
 
 impl MoveList {
     pub fn new() -> Self {
         Self {
-            moves: unsafe { MaybeUninit::uninit().assume_init() }, // Pls don't use uninitialized memory🙏
+            moves: [Move::NULL_MOVE; MAX_MOVES], // Pls don't use uninitialized memory🙏
             count: 0,
         }
     }
@@ -36,7 +34,7 @@ impl MoveList {
     /// Pushes a move into the list.
     #[inline(always)]
     pub fn push(&mut self, m: Move) {
-        self.moves[self.count].write(m);
+        self.moves[self.count] = m;
         self.count += 1;
     }
 
@@ -54,15 +52,21 @@ impl MoveList {
 
     /// Returns the i-th move. Pls don't use uninitialized memory🙏.
     #[inline(always)]
-    pub unsafe fn get(&self, i: usize) -> Move {
+    pub fn get(&self, i: usize) -> Move {
         debug_assert!(i < self.count, "Move index out of bounds");
-        unsafe { self.moves[i].assume_init() }
+        self.moves[i]
+    }
+
+    /// Resets the count of moves. Does not delete or move data.
+    #[inline(always)]
+    pub fn reset(&mut self) {
+        self.count = 0;
     }
 
     /// Allows iteration over the move list.
     #[inline(always)]
     pub fn iter(&self) -> impl Iterator<Item = Move> + '_ {
-        self.moves[..self.count].iter().map(|m| unsafe { m.assume_init() })
+        self.moves[..self.count].iter().copied()
     }
 }
 
