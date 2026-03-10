@@ -59,62 +59,13 @@ impl Board {
         Self::default()
     }
 
-    #[inline(always)]
-    fn add_piece(&mut self, piece: Piece, sq: Square) {
-        let color = piece.color();
-        let piece_kind = piece.kind();
-        let state = &mut self.state_stack[self.state_idx];
-        let phase = state.phase;
-
-        self.mailbox[sq] = Some(piece);
-        self.pieces[piece_kind] ^= sq.bb();
-        self.colors[color] ^= sq.bb();
-        state.phase += eval::phase_weight(piece_kind);
-        state.eval += self.psqt.probe(color, piece_kind, sq, phase);
-    }
-
-    #[inline(always)]
-    fn remove_piece(&mut self, piece: Piece, sq: Square) {
-        let color = piece.color();
-        let piece_kind = piece.kind();
-        let state = &mut self.state_stack[self.state_idx];
-        let phase = state.phase;
-
-        self.mailbox[sq] = None;
-        self.pieces[piece_kind] ^= sq.bb();
-        self.colors[color] ^= sq.bb();
-        state.phase -= eval::phase_weight(piece_kind);
-        state.eval -= self.psqt.probe(color, piece_kind, sq, phase);
-    }
-
-    #[inline(always)]
-    fn move_piece(&mut self, piece: Piece, from: Square, to: Square) {
-        let state = &mut self.state_stack[self.state_idx];
-        let color = piece.color();
-        let piece_kind = piece.kind();
-        let phase = state.phase;
-
-        self.mailbox[from] = None;
-        self.mailbox[to] = Some(piece);
-
-        self.pieces[piece_kind] ^= from.bb() | to.bb();
-        self.colors[color] ^= from.bb() | to.bb();
-
-        state.eval += self.psqt.probe(color, piece_kind, to, phase) - self.psqt.probe(color, piece_kind, from, phase);
-    }
-
-    #[inline(always)]
-    fn store_capture(&mut self, captured: Piece) {
-        let state = &mut self.state_stack[self.state_idx];
-        state.captured = Some(captured);
-    }
-
     /// Makes a pseudo-legal move.
     ///
-    /// Does NOT check legality (king safety). Must be paired with `unmake_move`.
+    /// Does NOT check legality. Must be paired with `unmake_move`.
     pub fn make_move(&mut self, m: Move) {
         let (from, to) = (m.from(), m.to());
         let (us, them) = (self.side_to_move, !self.side_to_move);
+        let mut phase_delta = 0;
 
         self.forward_state();
 
@@ -123,8 +74,8 @@ impl Board {
         // ------------------------------------
         debug_assert!(self.mailbox[from].is_some()); // There must be a piece in the origin square
         let moved_piece = self.piece_on_unchecked(from);
-        let moved_type = moved_piece.kind();
-        self.remove_piece(moved_piece, from);
+        let moved_kind = moved_piece.kind();
+        self.remove_piece::<true>(moved_piece, from);
 
         // ------------------------------------
         // 2 - Remove captured piece, if any
@@ -132,19 +83,21 @@ impl Board {
         if m.is_enpassant() {
             let captured_sq = if us == Color::White { to.south() } else { to.north() };
             let captured_piece = Piece::new(them, PieceKind::Pawn);
-            self.remove_piece(captured_piece, captured_sq);
+            self.remove_piece::<true>(captured_piece, captured_sq);
             self.store_capture(captured_piece);
+            phase_delta -= eval::phase_weight(PieceKind::Pawn);
         } else if m.is_capture() {
             debug_assert!(self.mailbox[to].is_some()); // There must be a piece in the destination square
             let captured_piece = self.piece_on_unchecked(to);
-            self.remove_piece(captured_piece, to);
+            self.remove_piece::<true>(captured_piece, to);
             self.store_capture(captured_piece);
+            phase_delta -= eval::phase_weight(captured_piece.kind());
         }
 
         // ------------------------------------
         // 3 -    Reset halfmove count
         // ------------------------------------
-        if moved_type == PieceKind::Pawn || m.is_capture() {
+        if moved_kind == PieceKind::Pawn || m.is_capture() {
             self.state_stack[self.state_idx].halfmove = 0;
         }
 
@@ -152,11 +105,12 @@ impl Board {
         // 4 - Place piece on destination
         // ------------------------------------
         if m.is_promotion() {
-            let promoted_type = m.promotion_piece();
-            let promoted_piece = Piece::new(us, promoted_type);
-            self.add_piece(promoted_piece, to); // Yaaaaas queeeeen!
+            let promoted_kind = m.promotion_piece();
+            let promoted_piece = Piece::new(us, promoted_kind);
+            self.add_piece::<true>(promoted_piece, to); // Yaaaaas queeeeen!
+            phase_delta += eval::phase_weight(promoted_kind) - eval::phase_weight(PieceKind::Pawn);
         } else {
-            self.add_piece(moved_piece, to); // Add the moved piece if quiet or capture
+            self.add_piece::<true>(moved_piece, to); // Add the moved piece if quiet or capture
         }
 
         // ------------------------------------
@@ -173,7 +127,7 @@ impl Board {
 
             let rook = self.piece_on_unchecked(rook_from);
             debug_assert!(rook.kind() == PieceKind::Rook);
-            self.move_piece(rook, rook_from, rook_to);
+            self.move_piece::<true>(rook, rook_from, rook_to);
         }
 
         // ---------------------------------------
@@ -202,7 +156,14 @@ impl Board {
         //TODO
 
         // ---------------------------------------
-        // 9 -           Flip side
+        // 9 -           Update phase
+        // ---------------------------------------
+        // Phase is updated at the end so to avoid evaluation instability
+        let state = &mut self.state_stack[self.state_idx];
+        state.phase += phase_delta;
+
+        // ---------------------------------------
+        // 10 -           Flip side
         // ---------------------------------------
         self.side_to_move = !self.side_to_move;
     }
@@ -213,33 +174,27 @@ impl Board {
     pub fn unmake_move(&mut self, m: Move) {
         let (from, to) = (m.from(), m.to());
         let mut moved_piece = self.piece_on_unchecked(to);
-        let state = self.state_stack[self.state_idx];
+        let captured_piece = self.state_stack[self.state_idx].captured;
 
         // 1 - Flip side
         self.side_to_move = !self.side_to_move;
-        let (us, them) = (self.side_to_move, !self.side_to_move);
+        let us = self.side_to_move;
 
         // 2 - Undo destination square
-        self.pieces[moved_piece.kind()] ^= to.bb();
-        self.colors[us] ^= to.bb();
-        self.mailbox[to] = None;
+        self.remove_piece::<false>(moved_piece, to);
 
         // 3 - Restore captured piece
-        if let Some(captured) = state.captured {
+        if let Some(captured) = captured_piece {
             let captured_sq =
                 if m.is_enpassant() { if us == Color::White { to.south() } else { to.north() } } else { to };
-            self.mailbox[captured_sq] = Some(captured);
-            self.pieces[captured.kind()] ^= captured_sq.bb();
-            self.colors[them] ^= captured_sq.bb();
+            self.add_piece::<false>(captured, captured_sq);
         }
 
         // 4 - Restore origin square
         if m.is_promotion() {
             moved_piece = Piece::new(us, PieceKind::Pawn); // Moved piece "becomes" a pawn
         }
-        self.mailbox[from] = Some(moved_piece);
-        self.pieces[moved_piece.kind()] ^= from.bb();
-        self.colors[us] ^= from.bb();
+        self.add_piece::<false>(moved_piece, from);
 
         // 5 - Undo castling
         if m.is_castling() {
@@ -251,14 +206,82 @@ impl Board {
                 _ => unreachable!(),
             };
             let rook = self.piece_on_unchecked(rook_to);
-            self.mailbox[rook_to] = None;
-            self.mailbox[rook_from] = Some(rook);
-            self.pieces[PieceKind::Rook] ^= rook_from.bb() | rook_to.bb();
-            self.colors[us] ^= rook_from.bb() | rook_to.bb();
+            self.move_piece::<false>(rook, rook_to, rook_from);
         }
 
         // 6 - Pop state
         self.state_idx -= 1;
+    }
+
+    /// Adds a piece to the board at the given square.
+    ///
+    /// Updates bitboards and mailbox. If `UPDATE_EVAL` is true, updates the evaluation
+    /// using the current phase.
+    #[inline(always)]
+    fn add_piece<const UPDATE_EVAL: bool>(&mut self, piece: Piece, sq: Square) {
+        let color = piece.color();
+        let piece_kind = piece.kind();
+
+        self.mailbox[sq] = Some(piece);
+        self.pieces[piece_kind] ^= sq.bb();
+        self.colors[color] ^= sq.bb();
+
+        if UPDATE_EVAL {
+            let state = &mut self.state_stack[self.state_idx];
+            let phase = state.phase;
+            state.eval += self.psqt.probe(color, piece_kind, sq, phase);
+        }
+    }
+
+    /// Removes a piece from the board at the given square.
+    ///
+    /// Updates bitboards and mailbox. If `UPDATE_EVAL` is true, updates the evaluation
+    /// using the current phase.
+    #[inline(always)]
+    fn remove_piece<const UPDATE_EVAL: bool>(&mut self, piece: Piece, sq: Square) {
+        let color = piece.color();
+        let piece_kind = piece.kind();
+
+        self.mailbox[sq] = None;
+        self.pieces[piece_kind] ^= sq.bb();
+        self.colors[color] ^= sq.bb();
+
+        if UPDATE_EVAL {
+            let state = &mut self.state_stack[self.state_idx];
+            let phase = state.phase;
+            state.eval -= self.psqt.probe(color, piece_kind, sq, phase);
+        }
+    }
+
+    /// Moves a piece from one square to another.
+    ///
+    /// Updates bitboards and mailbox. If `UPDATE_EVAL` is true, updates the evaluation
+    /// using the current phase (adds the difference between destination and origin PSQT values).
+    #[inline(always)]
+    fn move_piece<const UPDATE_EVAL: bool>(&mut self, piece: Piece, from: Square, to: Square) {
+        let color = piece.color();
+        let piece_kind = piece.kind();
+
+        self.mailbox[from] = None;
+        self.mailbox[to] = Some(piece);
+        self.pieces[piece_kind] ^= from.bb() | to.bb();
+        self.colors[color] ^= from.bb() | to.bb();
+
+        if UPDATE_EVAL {
+            let state = &mut self.state_stack[self.state_idx];
+            let phase = state.phase;
+            state.eval +=
+                self.psqt.probe(color, piece_kind, to, phase) - self.psqt.probe(color, piece_kind, from, phase);
+        }
+    }
+
+    /// Stores a captured piece in the current state frame.
+    ///
+    /// Used to track captures for unmaking moves.
+    #[inline(always)]
+    fn store_capture(&mut self, captured: Piece) {
+        let state = &mut self.state_stack[self.state_idx];
+        state.captured = Some(captured);
     }
 
     /// Propagates the state forward, by copying certain fields and resetting others.
@@ -381,7 +404,7 @@ impl Board {
         unsafe { self.mailbox[sq].unwrap_unchecked() }
     }
 
-    /// Returns a specific bitboard from `self.colors`.
+    /// Returns a specific color bitboard from `self.colors`.
     #[inline(always)]
     pub fn color(&self, color: Color) -> Bitboard {
         self.colors[color as usize]
