@@ -13,12 +13,14 @@ pub enum Color {
 /// Example: `array[Color::White]`
 impl<T> Index<Color> for [T] {
     type Output = T;
+    #[inline(always)]
     fn index(&self, index: Color) -> &Self::Output {
         unsafe { self.get_unchecked(index as usize) }
     }
 }
 
 impl<T> IndexMut<Color> for [T] {
+    #[inline(always)]
     fn index_mut(&mut self, index: Color) -> &mut Self::Output {
         unsafe { self.get_unchecked_mut(index as usize) }
     }
@@ -128,6 +130,7 @@ impl Square {
         Bitboard(1u64 << (self as u8))
     }
 
+    #[inline(always)]
     pub fn mirror_rank(self) -> Square {
         unsafe { std::mem::transmute((self as u8) ^ 56) }
     }
@@ -152,12 +155,14 @@ impl fmt::Display for Square {
 /// Example: `array[Color::White]`
 impl<T> Index<Square> for [T] {
     type Output = T;
+    #[inline(always)]
     fn index(&self, index: Square) -> &Self::Output {
         unsafe { self.get_unchecked(index as usize) }
     }
 }
 
 impl<T> IndexMut<Square> for [T] {
+    #[inline(always)]
     fn index_mut(&mut self, index: Square) -> &mut Self::Output {
         unsafe { self.get_unchecked_mut(index as usize) }
     }
@@ -189,13 +194,28 @@ impl PieceKind {
 /// Example: `array[PieceType::YaasssQueeeeeen]`
 impl<T> Index<PieceKind> for [T] {
     type Output = T;
+    #[inline(always)]
     fn index(&self, index: PieceKind) -> &Self::Output {
         unsafe { self.get_unchecked(index as usize) }
     }
 }
 impl<T> IndexMut<PieceKind> for [T] {
+    #[inline(always)]
     fn index_mut(&mut self, index: PieceKind) -> &mut Self::Output {
         unsafe { self.get_unchecked_mut(index as usize) }
+    }
+}
+
+/// Returns the value of a piece for MVV-LVA. Should be optimized by the compiler.
+#[inline(always)]
+pub fn piece_value(piece_type: PieceKind) -> i32 {
+    match piece_type {
+        PieceKind::Pawn => 100,
+        PieceKind::Knight => 320,
+        PieceKind::Bishop => 330,
+        PieceKind::Rook => 500,
+        PieceKind::Queen => 900,
+        PieceKind::King => 0, // Dummy
     }
 }
 

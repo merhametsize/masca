@@ -1,7 +1,7 @@
 use crate::board::Board;
 use crate::movegen::{MoveList, generate_all_captures, generate_all_moves};
 use crate::moves::Move;
-use crate::types::{Color, PieceKind, Square};
+use crate::types::{self, Color, PieceKind, Square};
 
 const SCORE_INF: i32 = 32_000;
 const SCORE_MATE: i32 = 29_000;
@@ -16,13 +16,23 @@ pub struct Searcher<'a> {
     pv_length: [usize; 64],
 
     killers: [[Move; 2]; 64],
-
     lmr_table: [[usize; 64]; 64],  // Late Move Reductions (LMR) table
     history: [[[i32; 64]; 64]; 2], // History heuristics, [side][from][to]
+
+    mvv_lva_table: [[i32; 6]; 6],
 }
 
 impl<'a> Searcher<'a> {
     pub fn new(board: &'a mut Board) -> Self {
+        // Initialize MVV-LVA table
+        let mut mvv_lva_table = [[0i32; 6]; 6];
+        for attacker in PieceKind::ALL {
+            for victim in PieceKind::ALL {
+                use types::piece_value;
+                mvv_lva_table[attacker][victim] = 10_000 + (piece_value(victim) * 100) - piece_value(attacker);
+            }
+        }
+
         Self {
             board: board,
             best_move: Move::NULL_MOVE,
@@ -35,6 +45,8 @@ impl<'a> Searcher<'a> {
 
             lmr_table: Self::init_lmr_table(),
             history: [[[0; 64]; 64]; 2],
+
+            mvv_lva_table: mvv_lva_table,
         }
     }
 
@@ -259,20 +271,6 @@ impl<'a> Searcher<'a> {
     /// Assigns a score to a specific move. Uses PV-table, MVV-LVA and killer move heuristics.
     #[inline(always)]
     fn score_move<const QUIESCENCE: bool>(&self, m: Move, ply: usize) -> i32 {
-        // Attacker index 0-5 (P, N, B, R, Q, K), Victim index 0-5
-        // MVV_LVA[attacker][victim] = 10000 + (victim+1)*100 - attacker
-        // 10k is added so that captures scores better than a killer move (which is 9000).
-        #[rustfmt::skip]
-        pub const MVV_LVA: [[i32; 6]; 6] = [
-            // victim:   P      N      B      R      Q      K
-            /* P */ [10000, 10100, 10200, 10300, 10400, 10500],
-            /* N */ [9999, 10099, 10199, 10299, 10399, 10499],
-            /* B */ [9998, 10098, 10198, 10298, 10398, 10498],
-            /* R */ [9997, 10097, 10197, 10297, 10397, 10497],
-            /* Q */ [9996, 10096, 10196, 10296, 10396, 10496],
-            /* K */ [9995, 10095, 10195, 10295, 10395, 10495],
-        ];
-
         // 1 - PV Move gets highest priority
         if !QUIESCENCE && m == self.pv_table[ply][ply] {
             return 20000;
@@ -283,7 +281,7 @@ impl<'a> Searcher<'a> {
             let attacker = self.board.piece_on_unchecked(m.from()).kind();
             let victim = if m.is_enpassant() { PieceKind::Pawn } else { self.board.piece_on_unchecked(m.to()).kind() };
 
-            return MVV_LVA[attacker][victim];
+            return self.mvv_lva_table[attacker][victim];
         }
 
         if !QUIESCENCE {

@@ -328,13 +328,14 @@ impl Board {
         let sign = 1 - ((self.side_to_move as i32) << 1); // Branchless
 
         // Interpolate middlegame and endgame scores
-        let score = (state.eval_midgame * phase + state.eval_endgame * (MAX_PHASE - phase)) / MAX_PHASE;
+        let score = (state.eval_midgame * phase + state.eval_endgame * (MAX_PHASE - phase)) >> 8; // r-shift by 8 divides by 2
         score * sign
     }
 
     /// Returns true if `color`'s king is in check.
     ///
     /// Locates king square and calls `is_square_attacked`.
+    #[inline(always)]
     pub fn king_in_check(&self, color: Color) -> bool {
         let king_bb = self.pieces[PieceKind::King] & self.colors[color];
         debug_assert!(king_bb != Bitboard(0));
@@ -351,18 +352,27 @@ impl Board {
         let their_pieces = self.colors[by];
         let attack_tables = &self.attack_tables;
 
+        let pawns = self.pieces[PieceKind::Pawn];
+        let knights = self.pieces[PieceKind::Knight];
+        let bishops = self.pieces[PieceKind::Bishop];
+        let rooks = self.pieces[PieceKind::Rook];
+        let queens = self.pieces[PieceKind::Queen];
+        let kings = self.pieces[PieceKind::King];
+        let their_bishops_queens = (bishops | queens) & their_pieces;
+        let their_rooks_queens = (rooks | queens) & their_pieces;
+
         // Pawn attacks
-        if attack_tables.pawn_capture[!by][sq] & (self.pieces[PieceKind::Pawn] & their_pieces) != Bitboard(0) {
+        if attack_tables.pawn_capture[!by][sq] & (pawns & their_pieces) != Bitboard(0) {
             return true;
         }
 
         // Knight attacks
-        if attack_tables.knight[sq] & (self.piece(PieceKind::Knight) & their_pieces) != Bitboard(0) {
+        if attack_tables.knight[sq] & (knights & their_pieces) != Bitboard(0) {
             return true;
         }
 
         // King attacks
-        if attack_tables.king[sq] & (self.piece(PieceKind::King) & their_pieces) != Bitboard(0) {
+        if attack_tables.king[sq] & (kings & their_pieces) != Bitboard(0) {
             return true;
         }
 
@@ -375,8 +385,7 @@ impl Board {
             let idx = ((relevant.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
             let attacks = mt.bishop_attacks[mt.bishop_offsets[sq] + idx];
 
-            if attacks & ((self.piece(PieceKind::Bishop) | self.piece(PieceKind::Queen)) & their_pieces) != Bitboard(0)
-            {
+            if attacks & their_bishops_queens != Bitboard(0) {
                 return true;
             }
         }
@@ -390,7 +399,7 @@ impl Board {
             let idx = ((relevant.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
             let attacks = mt.rook_attacks[mt.rook_offsets[sq] + idx];
 
-            if attacks & ((self.piece(PieceKind::Rook) | self.piece(PieceKind::Queen)) & their_pieces) != Bitboard(0) {
+            if attacks & their_rooks_queens != Bitboard(0) {
                 return true;
             }
         }

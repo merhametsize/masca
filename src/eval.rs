@@ -240,15 +240,15 @@ pub fn piece_value_endgame(piece_type: PieceKind) -> i32 {
 pub fn phase_weight(piece_type: PieceKind) -> i32 {
     match piece_type {
         PieceKind::Pawn => 0,
-        PieceKind::Knight => 1,
-        PieceKind::Bishop => 1,
-        PieceKind::Rook => 2,
-        PieceKind::Queen => 4,
+        PieceKind::Knight => 11,
+        PieceKind::Bishop => 11,
+        PieceKind::Rook => 21,
+        PieceKind::Queen => 42,
         PieceKind::King => 0,
     }
 }
 
-pub const MAX_PHASE: i32 = 24; // Sum of all piece phase weights
+pub const MAX_PHASE: i32 = 256; // Sum of all piece phase weights
 
 /// Computes game phase based on material.
 /// Phase 0 = endgame, phase MAX_PHASE = opening

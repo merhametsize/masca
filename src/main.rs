@@ -23,7 +23,6 @@ mod search;
 mod types;
 
 use crate::board::Board;
-use crate::perft::perft_n;
 use crate::search::Searcher;
 
 #[allow(dead_code)]
@@ -40,11 +39,9 @@ const TACTICAL_MATE: &str = "r1b1k2r/pppp1ppp/2n2n2/1B2p3/4P3/2N5/PPPP1PPP/R1BQK
 fn main() {
     //benchmark_perft(6);
     let mut board = Board::new();
-    //board.from_fen(KIWIPETE).unwrap();
-    board.set_startpos();
+    board.from_fen(KIWIPETE).unwrap();
+    //board.set_startpos();
     board.print();
-
-    perft_n(5);
 
     let mut searcher = Searcher::new(&mut board);
     searcher.iterative_deepening(11);
