@@ -172,12 +172,12 @@ impl PieceSquareTables {
         for piece in PieceKind::ALL {
             for sq in Square::ALL {
                 let score_midgame = piece_value_midgame(piece) + pst_midgame[piece][sq];
-                let score_endgame = piece_value_midgame(piece) + pst_endgame[piece][sq];
+                let score_endgame = piece_value_endgame(piece) + pst_endgame[piece][sq];
 
                 table[Color::White][piece][sq] = pack(score_midgame, score_endgame);
 
                 let mirrored = sq.mirror_rank();
-                let score_midgame = -(piece_value_endgame(piece) + pst_midgame[piece][mirrored]);
+                let score_midgame = -(piece_value_midgame(piece) + pst_midgame[piece][mirrored]);
                 let score_endgame = -(piece_value_endgame(piece) + pst_endgame[piece][mirrored]);
 
                 table[Color::Black][piece][sq] = pack(score_midgame, score_endgame);
@@ -188,7 +188,7 @@ impl PieceSquareTables {
     }
 
     #[inline(always)]
-    pub fn probe(&self, color: Color, piece_kind: PieceKind, sq: Square, phase: i32) -> i32 {
+    pub fn probe(&self, color: Color, piece_kind: PieceKind, sq: Square) -> (i32, i32) {
         let packed = self.table[color][piece_kind][sq];
 
         // Unpack midgame and endgame
@@ -199,8 +199,7 @@ impl PieceSquareTables {
         let mg = mg as i16 as i32;
         let eg = eg as i16 as i32;
 
-        // Linear interpolation
-        (mg * phase + eg * (MAX_PHASE - phase)) / MAX_PHASE
+        (mg, eg)
     }
 }
 
@@ -249,7 +248,7 @@ pub fn phase_weight(piece_type: PieceKind) -> i32 {
     }
 }
 
-const MAX_PHASE: i32 = 24; // Sum of all piece phase weights
+pub const MAX_PHASE: i32 = 24; // Sum of all piece phase weights
 
 /// Computes game phase based on material.
 /// Phase 0 = endgame, phase MAX_PHASE = opening

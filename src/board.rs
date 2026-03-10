@@ -46,9 +46,8 @@ pub struct State {
     captured: Option<Piece>, // Which piece was captured in the last move
 
     phase: i32,
-    eval: i32, // Cached static evaluation score
-    #[allow(dead_code)]
-    pst_score: i32,
+    eval_midgame: i32,
+    eval_endgame: i32,
 
     #[allow(dead_code)]
     zobrist: Bitboard,
@@ -171,6 +170,7 @@ impl Board {
     /// Reverts the last move incrementally.
     ///
     /// After `make_move(m)` + `unmake_move(m)`: board state must be bit-identical.
+    /// Phase is not updated by since the previous value is already stored in state.
     pub fn unmake_move(&mut self, m: Move) {
         let (from, to) = (m.from(), m.to());
         let mut moved_piece = self.piece_on_unchecked(to);
@@ -228,8 +228,9 @@ impl Board {
 
         if UPDATE_EVAL {
             let state = &mut self.state_stack[self.state_idx];
-            let phase = state.phase;
-            state.eval += self.psqt.probe(color, piece_kind, sq, phase);
+            let (mg, eg) = self.psqt.probe(color, piece_kind, sq);
+            state.eval_midgame += mg;
+            state.eval_endgame += eg;
         }
     }
 
@@ -248,8 +249,9 @@ impl Board {
 
         if UPDATE_EVAL {
             let state = &mut self.state_stack[self.state_idx];
-            let phase = state.phase;
-            state.eval -= self.psqt.probe(color, piece_kind, sq, phase);
+            let (mg, eg) = self.psqt.probe(color, piece_kind, sq);
+            state.eval_midgame -= mg;
+            state.eval_endgame -= eg;
         }
     }
 
@@ -269,9 +271,10 @@ impl Board {
 
         if UPDATE_EVAL {
             let state = &mut self.state_stack[self.state_idx];
-            let phase = state.phase;
-            state.eval +=
-                self.psqt.probe(color, piece_kind, to, phase) - self.psqt.probe(color, piece_kind, from, phase);
+            let (mg_from, eg_from) = self.psqt.probe(color, piece_kind, from);
+            let (mg_to, eg_to) = self.psqt.probe(color, piece_kind, to);
+            state.eval_midgame += mg_to - mg_from;
+            state.eval_endgame += eg_to - eg_from;
         }
     }
 
@@ -319,10 +322,14 @@ impl Board {
     /// Returns color-relative static evaluation of the position.
     #[inline(always)]
     pub fn evaluate_relative(&mut self) -> i32 {
-        //println!("eval = {}", self.eval + self.state_stack[self.state_idx].pst_score);
+        use eval::MAX_PHASE;
         let state = &self.state_stack[self.state_idx];
+        let phase = state.phase;
         let sign = 1 - ((self.side_to_move as i32) << 1); // Branchless
-        state.eval * sign
+
+        // Interpolate middlegame and endgame scores
+        let score = (state.eval_midgame * phase + state.eval_endgame * (MAX_PHASE - phase)) / MAX_PHASE;
+        score * sign
     }
 
     /// Returns true if `color`'s king is in check.
@@ -456,7 +463,8 @@ impl Board {
         let en_passant_part = parts.next().unwrap_or("-");
         let halfmove_part = parts.next().unwrap_or("0");
         let _ = parts.next().unwrap_or("1"); //fullmove
-        let mut evaluation: i32 = 0;
+        let mut eval_midgame: i32 = 0;
+        let mut eval_endgame: i32 = 0;
 
         //Reset board
         self.mailbox.fill(Option::None);
@@ -474,19 +482,20 @@ impl Board {
                     let skip = ch.to_digit(10).unwrap();
                     file += skip;
                 } else {
-                    let sq = rank_num * 8 + file as usize;
+                    let sq_idx = rank_num * 8 + file as usize;
+                    let sq = Square::new(sq_idx as u8);
                     let piece = Piece::from_char(ch);
                     self.mailbox[sq] = Some(piece);
 
                     let color = piece.color();
-                    let ptype = piece.kind();
+                    let piece_kind = piece.kind();
                     let sq_bb = Square::new(sq as u8).bb();
-                    self.pieces[ptype] |= sq_bb;
+                    self.pieces[piece_kind] |= sq_bb;
                     self.colors[color] |= sq_bb;
 
-                    let (piece_type, color) = (piece.kind(), piece.color());
-                    let sign = 1 - ((color as i32) << 1); // Branchless
-                    evaluation += eval::piece_value_midgame(piece_type) * 1 * sign;
+                    let (mg, eg) = self.psqt.probe(color, piece_kind, sq);
+                    eval_midgame += mg;
+                    eval_endgame += eg;
 
                     file += 1;
                 }
@@ -535,9 +544,9 @@ impl Board {
             en_passant,
             halfmove: halfmove_part.parse().unwrap_or_default(),
             captured: Option::None,
-            eval: evaluation,
+            eval_midgame: eval_midgame,
+            eval_endgame: eval_endgame,
             phase: eval::compute_game_phase(&self),
-            pst_score: 0,
             zobrist: Bitboard(0),
         };
         self.state_idx = 0;
@@ -590,9 +599,9 @@ impl Default for State {
             en_passant: None,
             halfmove: 0,
             captured: Option::None,
-            eval: 0,
+            eval_midgame: 0,
+            eval_endgame: 0,
             phase: 0,
-            pst_score: 0,
             zobrist: Bitboard(0),
         }
     }

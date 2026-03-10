@@ -23,6 +23,7 @@ mod search;
 mod types;
 
 use crate::board::Board;
+use crate::perft::perft_n;
 use crate::search::Searcher;
 
 #[allow(dead_code)]
@@ -40,10 +41,11 @@ fn main() {
     //benchmark_perft(6);
     let mut board = Board::new();
     //board.from_fen(KIWIPETE).unwrap();
-    //board.set_startpos();
-    board.from_fen(KIWIPETE).unwrap();
+    board.set_startpos();
     board.print();
 
+    perft_n(5);
+
     let mut searcher = Searcher::new(&mut board);
-    searcher.iterative_deepening(10);
+    searcher.iterative_deepening(11);
 }
