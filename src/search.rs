@@ -29,9 +29,9 @@ const MAX_PLY: usize = 256;
 ///
 /// Most fields are persistent heuristic tables reused between searches, while move lists are overwritten at each search invocation.
 pub struct Searcher<'a> {
-    board: &'a mut Board,
+    pub best_move: Move,
 
-    best_move: Move,
+    board: &'a mut Board,
     nodes: u64,
     move_pool: [MoveList; MAX_PLY], // MoveLists are reset and overwritten at every search() call
 
