@@ -115,7 +115,7 @@ impl<'a> Searcher<'a> {
         let mut legal_move_count = 0; // Flag used for mate and stalemate detection
         for move_idx in 0..moves.count() {
             self.pick_best_move(&mut moves, &mut scores, move_idx);
-            let m = moves.get(move_idx);
+            let m = unsafe { moves.get(move_idx) };
 
             let (is_capture, is_promotion) = (m.is_capture(), m.is_promotion());
 
@@ -236,7 +236,7 @@ impl<'a> Searcher<'a> {
 
         for move_idx in 0..moves.count() {
             self.pick_best_move(&mut moves, &mut scores, move_idx);
-            let m = moves.get(move_idx);
+            let m = unsafe { moves.get(move_idx) };
 
             self.board.make_move(m);
             if self.board.king_in_check(!self.board.side_to_move()) {
@@ -264,7 +264,7 @@ impl<'a> Searcher<'a> {
         let n = moves.count();
 
         for i in 0..n {
-            scores[i] = self.score_move::<QUIESCENCE>(moves.get(i), ply);
+            scores[i] = self.score_move::<QUIESCENCE>(unsafe { moves.get(i) }, ply);
         }
     }
 

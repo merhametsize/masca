@@ -11,24 +11,32 @@ use crate::board::{BK, BQ, Board, WK, WQ};
 use crate::moves::{Move, MoveKind};
 use crate::types::{Color, PieceKind, Square};
 
+use std::mem::MaybeUninit;
+
+const MAX_MOVES: usize = 256;
+
 /// Container for moves generated for a position.
 ///
 /// Preallocates space for up to 256 moves to avoid dynamic allocation.
 /// Use `push()` to add moves in the inner loops of move generation.
+#[derive(Copy, Clone)]
 pub struct MoveList {
-    moves: [Move; 256],
+    moves: [MaybeUninit<Move>; MAX_MOVES], // Uninitialized for better performance
     count: usize,
 }
 
 impl MoveList {
     pub fn new() -> Self {
-        Self { moves: [Move::NULL_MOVE; 256], count: 0 }
+        Self {
+            moves: unsafe { MaybeUninit::uninit().assume_init() }, // Pls don't use uninitialized memory🙏
+            count: 0,
+        }
     }
 
     /// Pushes a move into the list.
     #[inline(always)]
     pub fn push(&mut self, m: Move) {
-        self.moves[self.count] = m;
+        self.moves[self.count].write(m);
         self.count += 1;
     }
 
@@ -44,15 +52,17 @@ impl MoveList {
         self.count
     }
 
-    /// Returns the i-th move
+    /// Returns the i-th move. Pls don't use uninitialized memory🙏.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> Move {
-        self.moves[i]
+    pub unsafe fn get(&self, i: usize) -> Move {
+        debug_assert!(i < self.count, "Move index out of bounds");
+        unsafe { self.moves[i].assume_init() }
     }
 
     /// Allows iteration over the move list.
+    #[inline(always)]
     pub fn iter(&self) -> impl Iterator<Item = Move> + '_ {
-        self.moves[..self.count].iter().copied()
+        self.moves[..self.count].iter().map(|m| unsafe { m.assume_init() })
     }
 }
 
