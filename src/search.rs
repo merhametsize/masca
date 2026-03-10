@@ -1,3 +1,18 @@
+//! Search module
+//!
+//! Implements the main game tree search used by the engine. The search is based on **iterative deepening** with **alpha-beta pruning**
+//!  using **Principal Variation Search (PVS)**. Several common search heuristics are implemented to improve pruning efficiency and move ordering:
+//!
+//! - **PV table** for principal variation tracking
+//! - **Killer moves**
+//! - **History heuristic**
+//! - **MVV-LVA** capture ordering
+//! - **Late Move Reductions (LMR)**
+//! - **Null move pruning**
+//! - **Futility pruning**
+//! - **Quiescence search**
+//!
+//! Move lists are stored in a preallocated per-ply pool to avoid stack allocations during search.
 use crate::board::Board;
 use crate::movegen::{MoveList, generate_all_captures, generate_all_moves};
 use crate::moves::Move;
@@ -7,6 +22,12 @@ const SCORE_INF: i32 = 32_000;
 const SCORE_MATE: i32 = 29_000;
 const MAX_PLY: usize = 256;
 
+/// Search driver and heuristic storage.
+///
+/// The `Searcher` owns all data structures required for tree search and  move ordering heuristics. It operates on a mutable reference
+/// to a `Board` and performs iterative deepening alpha-beta search.
+///
+/// Most fields are persistent heuristic tables reused between searches, while move lists are overwritten at each search invocation.
 pub struct Searcher<'a> {
     board: &'a mut Board,
 
@@ -25,6 +46,14 @@ pub struct Searcher<'a> {
 }
 
 impl<'a> Searcher<'a> {
+    /// Creates a new `Searcher` bound to the given board.
+    ///
+    /// Initializes heuristic tables including:
+    /// - MVV-LVA capture scoring
+    /// - Late Move Reduction table
+    /// - Killer and history heuristics
+    ///
+    /// No search state is preserved between instances.
     pub fn new(board: &'a mut Board) -> Self {
         // Initialize MVV-LVA table
         let mut mvv_lva_table = [[0i32; 6]; 6];
@@ -53,10 +82,11 @@ impl<'a> Searcher<'a> {
         }
     }
 
-    /// Performs iterative deepening search using Principal Variation Search (PVS).
+    /// Performs **iterative deepening** search up to `max_depth`.
     ///
-    /// The search starts from depth 1 and progressively increases up to `max_depth`. For each depth, the best score is
-    /// computed and search statistics are printed in a format compatible with typical chess engine UCI-style logging.
+    /// The search runs from depth `1` to `max_depth`, calling the main alpha-beta search at each iteration. After every completed depth,
+    /// search statistics and the current principal variation are printed in a UCI-style format.
+    /// The best move found at the root is stored in `best_move`.
     pub fn iterative_deepening(&mut self, max_depth: usize) {
         self.nodes = 0;
         self.best_move = Move::NULL_MOVE;
@@ -77,7 +107,20 @@ impl<'a> Searcher<'a> {
         }
     }
 
-    /// Principal variation search (PVS).
+    /// Principal Variation Search (PVS).
+    ///
+    /// Performs a negamax alpha-beta search with the following heuristics:
+    ///
+    /// - principal variation search
+    /// - null move pruning
+    /// - late move reductions
+    /// - futility pruning
+    /// - killer and history heuristics
+    ///
+    /// `depth` specifies the remaining search depth and `ply` the current distance from the root.
+    /// `alpha` and `beta` define the search window.
+    ///
+    /// Returns the evaluation score from the perspective of the side to move.
     fn search<const IS_PV: bool>(&mut self, depth: usize, ply: usize, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
@@ -220,7 +263,12 @@ impl<'a> Searcher<'a> {
         alpha
     }
 
-    /// Performs quiescence search.
+    /// Performs **quiescence search**.
+    ///
+    /// Extends the search beyond the nominal depth by exploring forcing capture sequences in order to avoid the horizon effect.
+    ///
+    /// Only capture moves are generated (unless the side to move is in check). An evaluation score is computed when the position is quiet.
+    /// Returns the stabilized evaluation score.
     fn quiescence(&mut self, ply: usize, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
@@ -264,7 +312,10 @@ impl<'a> Searcher<'a> {
         alpha
     }
 
-    /// Assigns each move a score depending on how promising it is.
+    /// Assigns scores to all moves in a move list.
+    ///
+    /// The scores are written into `scores` and later used by `pick_best_move` for incremental move ordering.
+    /// The scoring policy differs slightly during quiescence search.
     #[inline(always)]
     fn score_moves<const QUIESCENCE: bool>(&self, moves: &MoveList, ply: usize, scores: &mut [i32; 256]) {
         let n = moves.count();
@@ -306,7 +357,10 @@ impl<'a> Searcher<'a> {
         0
     }
 
-    /// Picks the best move among the remaining ones (start_idx..last_idx) and places it at start_idx.
+    /// Selects the highest-scoring move from the remaining moves.
+    ///
+    /// Performs a partial selection sort by swapping the best move in `[start_idx..]` into position `start_idx`. This allows moves
+    /// to be ordered incrementally during search without sorting the entire list.
     #[inline(always)]
     fn pick_best_move(moves: &mut MoveList, scores: &mut [i32; 256], start_idx: usize) {
         let mut best_idx = start_idx;
