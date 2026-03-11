@@ -262,7 +262,12 @@ pub fn generate_moves<P: Attacker, const WHITE: bool, const CAPTURE: bool>(board
     let them = if WHITE { board.color(Color::Black) } else { board.color(Color::White) };
 
     let mut attackers = board.piece(P::TYPE) & us;
-    let target_mask = if CAPTURE { them } else { board.empty_squares() };
+    let target_mask = if CAPTURE {
+        let enemy_king = board.piece(PieceKind::King) & them;
+        them & !enemy_king
+    } else {
+        board.empty_squares()
+    };
 
     while attackers != Bitboard(0) {
         let from = Square::new(attackers.pop_lsb() as u8);
@@ -300,12 +305,14 @@ pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, moves: &mut Move
 
     while pawns != Bitboard(0) {
         let from = Square::new(pawns.pop_lsb() as u8);
-        let mut attacks = board.attack_tables.pawn_capture[our_color][from] & (them | ep_square);
+        let enemy_king = board.piece(PieceKind::King) & them;
+        let mut attacks = board.attack_tables.pawn_capture[our_color][from] & (them & !enemy_king | ep_square);
 
         while attacks != Bitboard(0) {
             let to = Square::new(attacks.lsb() as u8);
             let to_bb = to.bb();
-            attacks ^= to_bb; // pop_lsb() would re-execute lsb() internally, xoring directly is faster
+            //attacks ^= to_bb; // pop_lsb() would re-execute lsb() internally, xoring directly is faster (?)
+            attacks.pop_lsb();
 
             if (to_bb & ep_square) != Bitboard(0) {
                 moves.push(Move::new_special(from, to, MoveKind::EnPassant));
