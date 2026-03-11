@@ -20,8 +20,7 @@ use rand::RngCore;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
 
-use crate::bitboard::Bitboard;
-use crate::types::Square;
+use crate::types::{Bitboard, Square};
 
 const ROOK_DELTAS: [(i8, i8); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 const BISHOP_DELTAS: [(i8, i8); 4] = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
@@ -55,10 +54,10 @@ pub struct MagicTables {
     pub rook_magics: [u64; 64],   // Magic multiplier for rooks
     pub bishop_magics: [u64; 64], // Magic multiplier for bishops
 
-    pub rook_attacks: [Bitboard; ROOK_MAP_SIZE],     // Flat rook attack table, indexed by offsets[sq] + magic_index
+    pub rook_attacks: [Bitboard; ROOK_MAP_SIZE], // Flat rook attack table, indexed by offsets[sq] + magic_index
     pub bishop_attacks: [Bitboard; BISHOP_MAP_SIZE], // Flat bishop attack table, indexed by offsets[sq] + magic_index
-    pub rook_offsets: [usize; 64],                   // Starting index in `rook_attacks` for each square
-    pub bishop_offsets: [usize; 64],                 // Starting index in `bishop_attacks` for each square
+    pub rook_offsets: [usize; 64],               // Starting index in `rook_attacks` for each square
+    pub bishop_offsets: [usize; 64],             // Starting index in `bishop_attacks` for each square
 }
 
 impl MagicTables {
@@ -93,8 +92,20 @@ impl MagicTables {
         let rook_attacks = self.generate_all_rook_attacks();
         let bishop_attacks = self.generate_all_bishop_attacks();
 
-        Self::search_loop(&self.rook_masks, &rook_attacks, &mut self.rook_magics, &mut self.rook_offsets, &mut self.rook_attacks);
-        Self::search_loop(&self.bishop_masks, &bishop_attacks, &mut self.bishop_magics, &mut self.bishop_offsets, &mut self.bishop_attacks);
+        Self::search_loop(
+            &self.rook_masks,
+            &rook_attacks,
+            &mut self.rook_magics,
+            &mut self.rook_offsets,
+            &mut self.rook_attacks,
+        );
+        Self::search_loop(
+            &self.bishop_masks,
+            &bishop_attacks,
+            &mut self.bishop_magics,
+            &mut self.bishop_offsets,
+            &mut self.bishop_attacks,
+        );
 
         // Invariant check
         let total_rook_slots: usize = self.rook_masks.iter().map(|m| 1usize << m.0.count_ones()).sum();
@@ -114,7 +125,10 @@ impl MagicTables {
     /// The resulting lookup is branchless and O(1):
     ///     index = offsets[sq] + ((occ & mask) * magic >> shift)
     /// A flat table is preferred to a matrix since different squares have a different number of relevant occupancies.
-    fn search_loop(masks: &[Bitboard; 64], attacks: &Vec<Vec<Bitboard>>, magics: &mut [u64; 64], offsets: &mut [usize; 64], flat_table: &mut [Bitboard]) {
+    fn search_loop(
+        masks: &[Bitboard; 64], attacks: &Vec<Vec<Bitboard>>, magics: &mut [u64; 64], offsets: &mut [usize; 64],
+        flat_table: &mut [Bitboard],
+    ) {
         let mut offset = 0usize;
 
         for sq in 0..64 {

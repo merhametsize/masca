@@ -4,10 +4,9 @@
 //! present state and past states, allowing for make/unmake move. The State object is memorized in a stack inside Board.
 
 use crate::attack::AttackTables;
-use crate::bitboard::Bitboard;
 use crate::eval::{self, PieceSquareTables};
 use crate::moves::Move;
-use crate::types::{Color, Piece, PieceKind, Square};
+use crate::types::{Bitboard, Color, Piece, PieceKind, Square};
 
 const MAX_PLY: usize = 128;
 

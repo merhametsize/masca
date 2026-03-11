@@ -5,9 +5,8 @@
 //!
 //! Sliding pieces are handled differently (in magics.rs) because of board occupancy.
 
-use crate::bitboard::Bitboard;
 use crate::magics::MagicTables;
-use crate::types::{Color, Square};
+use crate::types::{Bitboard, Color, Square};
 
 /// Contains the attack look-up tables per piece.
 pub struct AttackTables {

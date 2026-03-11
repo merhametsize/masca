@@ -6,10 +6,9 @@
 //!
 //! All inner loops are optimized for branchless execution, bitboard manipulation, and monomorphization
 
-use crate::bitboard::Bitboard;
 use crate::board::{BK, BQ, Board, WK, WQ};
 use crate::moves::{Move, MoveKind};
-use crate::types::{Color, PieceKind, Square};
+use crate::types::{Bitboard, Color, PieceKind, Square};
 
 const MAX_MOVES: usize = 256;
 
@@ -25,10 +24,7 @@ pub struct MoveList {
 
 impl MoveList {
     pub fn new() -> Self {
-        Self {
-            moves: [Move::NULL_MOVE; MAX_MOVES], // Pls don't use uninitialized memory🙏
-            count: 0,
-        }
+        Self { moves: [Move::NULL_MOVE; MAX_MOVES], count: 0 }
     }
 
     /// Pushes a move into the list.
@@ -50,7 +46,7 @@ impl MoveList {
         self.count
     }
 
-    /// Returns the i-th move. Pls don't use uninitialized memory🙏.
+    /// Returns the i-th move.
     #[inline(always)]
     pub fn get(&self, i: usize) -> Move {
         debug_assert!(i < self.count, "Move index out of bounds");

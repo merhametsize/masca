@@ -4,15 +4,18 @@
 //! This crate implements a complete chess engine written in (mostly) safe Rust.
 //!
 //! # Architecture
-//! - `bitboard.rs`: low-level bitboard definition
-//! - `board.rs`: chessboard representation
-//! - `movegen.rs`: move generation
-//! - `attack.rs`: attack tables generation on startup
-//! - `magics.rs`: sliding piece attack generation on startup
-//! - `moves.rs`: low-level move representation
+//!
+//! The engine is organized into several core modules and subfolders:
+//!
+//! - **bitboard.rs** — Low-level bitboard structures and operations.
+//! - **board.rs** — Chessboard state representation and board-level utilities.
+//! - **movegen.rs** — Legal move generation for all pieces.
+//! - **attack.rs** — Precomputed attack tables for fast move and threat evaluation.
+//! - **magics.rs** — Sliding piece attack generation using magic bitboards at startup.
+//! - **moves.rs** — Low-level move encoding, decoding, and manipulation.
+//! - **types/** — Core type definitions and enums used across the engine.
 
 mod attack;
-mod bitboard;
 mod board;
 mod eval;
 mod magics;
