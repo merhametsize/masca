@@ -6,15 +6,10 @@
 use crate::attack::AttackTables;
 use crate::eval::{self, PieceSquareTables};
 use crate::moves::Move;
+use crate::types::castling;
 use crate::types::{Bitboard, Color, Piece, PieceKind, Square};
 
 const MAX_PLY: usize = 128;
-
-// Castling encoding in a u8.
-pub const WK: u8 = 0b0001;
-pub const WQ: u8 = 0b0010;
-pub const BK: u8 = 0b0100;
-pub const BQ: u8 = 0b1000;
 
 /// Chess board representation.
 ///
@@ -131,14 +126,9 @@ impl Board {
         // ---------------------------------------
         // 6 - Update castling rights (branchless)
         // ---------------------------------------
-        let mut castling_mask: u8 = 0xFF; // Default: no change
-        castling_mask &= !((from == Square::E1) as u8 * (WK | WQ)); // White king move
-        castling_mask &= !((from == Square::E8) as u8 * (BK | BQ)); // Black king move
-        castling_mask &= !((from == Square::H1 || to == Square::H1) as u8 * WK); // Rook moves or is captured
-        castling_mask &= !((from == Square::A1 || to == Square::A1) as u8 * WQ); // Rook moves or is captured
-        castling_mask &= !((from == Square::H8 || to == Square::H8) as u8 * BK); // Rook moves or is captured
-        castling_mask &= !((from == Square::A8 || to == Square::A8) as u8 * BQ); // Rook moves or is captured
-        self.state_stack[self.state_idx].castling &= castling_mask;
+        use castling::RIGHTS_UPDATE_MASK;
+        self.state_stack[self.state_idx].castling &=
+            RIGHTS_UPDATE_MASK[from as usize] & RIGHTS_UPDATE_MASK[to as usize];
 
         // ---------------------------------------
         // 7 -    En passant activation
