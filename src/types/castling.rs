@@ -46,7 +46,7 @@ const PATH_BLACK_OO: Bitboard = Bitboard(Square::F8.as_u64() | Square::G8.as_u64
 /// Squares B8, C8, and D8.
 const PATH_BLACK_OOO: Bitboard = Bitboard(Square::B8.as_u64() | Square::C8.as_u64() | Square::D8.as_u64());
 
-#[repr(transparent)]
+#[repr(transparent)] // Treat the struct exactly like a u8
 #[derive(Copy, Clone)]
 pub struct CastlingRights {
     encoding: u8,

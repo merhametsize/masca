@@ -52,6 +52,15 @@ impl Board {
         Self::default()
     }
 
+    /// Clears the board completely.
+    pub fn clear(&mut self) {
+        self.mailbox.fill(None);
+        self.pieces.fill(Bitboard(0));
+        self.colors = [Bitboard(0); 2];
+        self.state_idx = 0;
+        self.state_stack[0] = State::default();
+    }
+
     /// Makes a pseudo-legal move.
     ///
     /// Does NOT check legality. Must be paired with `unmake_move`.
@@ -205,7 +214,7 @@ impl Board {
     /// Updates bitboards and mailbox. If `UPDATE_EVAL` is true, updates the evaluation
     /// using the current phase.
     #[inline(always)]
-    fn add_piece<const UPDATE_EVAL: bool>(&mut self, piece: Piece, sq: Square) {
+    pub fn add_piece<const UPDATE_EVAL: bool>(&mut self, piece: Piece, sq: Square) {
         let color = piece.color();
         let piece_kind = piece.kind();
 
@@ -394,7 +403,6 @@ impl Board {
         false
     }
 
-    /// Returns a specific bitboard from `self.pieces`.
     #[inline(always)]
     pub fn piece(&self, piece_type: PieceKind) -> Bitboard {
         self.pieces[piece_type as usize]
@@ -407,40 +415,59 @@ impl Board {
         unsafe { self.mailbox[sq].unwrap_unchecked() }
     }
 
-    /// Returns a specific color bitboard from `self.colors`.
     #[inline(always)]
     pub fn color(&self, color: Color) -> Bitboard {
         self.colors[color as usize]
     }
 
-    /// Returns black or white.
     #[inline(always)]
     pub fn side_to_move(&self) -> Color {
         self.side_to_move
     }
 
-    /// Returns which squares are occupied by a piece of any color.
+    #[inline(always)]
+    pub fn set_side_to_move(&mut self, color: Color) {
+        self.side_to_move = color;
+    }
+
     #[inline(always)]
     pub fn occupied_squares(&self) -> Bitboard {
         self.colors[Color::White] | self.colors[Color::Black]
     }
 
-    /// Returns empty squares.
     #[inline(always)]
     pub fn empty_squares(&self) -> Bitboard {
         !(self.colors[Color::White] | self.colors[Color::Black])
     }
 
-    /// Returns the en-passant capture square, if existing.
     #[inline(always)]
     pub fn en_passant_square(&self) -> Option<Square> {
         self.state_stack[self.state_idx].en_passant
     }
 
-    /// Returns the castling rights, encoded in a u8.
+    #[inline(always)]
+    pub fn set_en_passant_square(&mut self, sq: Option<Square>) {
+        self.state_stack[self.state_idx].en_passant = sq;
+    }
+
     #[inline(always)]
     pub fn castling_rights(&self) -> CastlingRights {
         self.state_stack[self.state_idx].castling
+    }
+
+    #[inline(always)]
+    pub fn set_castling_rights(&mut self, rights: CastlingRights) {
+        self.state_stack[self.state_idx].castling = rights;
+    }
+
+    #[inline(always)]
+    pub fn set_halfmove_clock(&mut self, halfmove: usize) {
+        self.state_stack[self.state_idx].halfmove = halfmove;
+    }
+
+    #[inline(always)]
+    pub fn set_game_phase(&mut self) {
+        self.state_stack[self.state_idx].phase = eval::compute_game_phase(&self);
     }
 
     /// Sets board to the starting position.
@@ -448,107 +475,6 @@ impl Board {
     /// Panics if the internal FEN parser fails.
     pub fn set_startpos(&mut self) {
         self.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
-    }
-
-    /// Sets board state from a FEN string
-    pub fn from_fen(&mut self, fen: &str) -> Result<(), &'static str> {
-        let mut parts = fen.split_whitespace();
-        let board_part = parts.next().ok_or("FEN missing board part")?;
-        let side_part = parts.next().ok_or("FEN missing side to move")?;
-        let castling_part = parts.next().unwrap_or("-");
-        let en_passant_part = parts.next().unwrap_or("-");
-        let halfmove_part = parts.next().unwrap_or("0");
-        let _ = parts.next().unwrap_or("1"); //fullmove
-        let mut eval_midgame: i32 = 0;
-        let mut eval_endgame: i32 = 0;
-
-        //Reset board
-        self.mailbox.fill(Option::None);
-        self.pieces.fill(Bitboard(0));
-        self.colors = [Bitboard(0); 2];
-        self.state_idx = 0;
-
-        // ===== Parse board squares =====
-        for (rank_idx, rank) in board_part.split('/').enumerate() {
-            let rank_num = 7 - rank_idx; //FEN top rank = 7
-            let mut file = 0;
-
-            for ch in rank.chars() {
-                if ch.is_digit(10) {
-                    let skip = ch.to_digit(10).unwrap();
-                    file += skip;
-                } else {
-                    let sq_idx = rank_num * 8 + file as usize;
-                    let sq = Square::new(sq_idx as u8);
-                    let piece = Piece::from_char(ch);
-                    self.mailbox[sq] = Some(piece);
-
-                    let color = piece.color();
-                    let piece_kind = piece.kind();
-                    let sq_bb = Square::new(sq as u8).bb();
-                    self.pieces[piece_kind] |= sq_bb;
-                    self.colors[color] |= sq_bb;
-
-                    let (mg, eg) = self.psqt.probe(color, piece_kind, sq);
-                    eval_midgame += mg;
-                    eval_endgame += eg;
-
-                    file += 1;
-                }
-            }
-            if file != 8 {
-                return Err("Invalid FEN rank length");
-            }
-        }
-
-        // ===== Parse side to move =====
-        self.side_to_move = match side_part {
-            "w" => Color::White,
-            "b" => Color::Black,
-            _ => return Err("Invalid side to move"),
-        };
-
-        // ===== Parse castling rights =====
-        let mut castling = CastlingRights::new();
-        castling.zero();
-        for ch in castling_part.chars() {
-            match ch {
-                'K' => castling.add_white_oo(),
-                'Q' => castling.add_white_ooo(),
-                'k' => castling.add_black_oo(),
-                'q' => castling.add_black_ooo(),
-                '-' => {}
-                _ => return Err("Invalid castling"),
-            }
-        }
-
-        // ===== Parse en passant square =====
-        let en_passant = if en_passant_part == "-" {
-            None
-        } else {
-            let bytes = en_passant_part.as_bytes();
-            let file = bytes[0].wrapping_sub(b'a');
-            let rank = bytes[1].wrapping_sub(b'1');
-            if file > 7 || rank > 7 {
-                return Err("Invalid en passant square");
-            }
-            Some(Square::new((rank as u8) * 8 + (file as u8)))
-        };
-
-        // ===== Set initial state =====
-        self.state_stack[0] = State {
-            castling,
-            en_passant,
-            halfmove: halfmove_part.parse().unwrap_or_default(),
-            captured: Option::None,
-            eval_midgame: eval_midgame,
-            eval_endgame: eval_endgame,
-            phase: eval::compute_game_phase(&self),
-            zobrist: Bitboard(0),
-        };
-        self.state_idx = 0;
-
-        Ok(())
     }
 
     /// Prints the board to console terminal for debug.

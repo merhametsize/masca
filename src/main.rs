@@ -18,6 +18,7 @@
 mod attack;
 mod board;
 mod eval;
+mod fen;
 mod magics;
 mod movegen;
 mod moves;
