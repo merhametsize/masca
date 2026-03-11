@@ -16,11 +16,11 @@
 use crate::board::Board;
 use crate::movegen::{MoveList, generate_all_captures, generate_all_moves};
 use crate::moves::Move;
-use crate::types::{self, Color, PieceKind, Square};
+use crate::types;
+use crate::types::{Color, PieceKind, Square};
 
 const SCORE_INF: i32 = 32_000;
 const SCORE_MATE: i32 = 29_000;
-const MAX_PLY: usize = 256;
 
 /// Search driver and heuristic storage.
 ///
@@ -33,7 +33,6 @@ pub struct Searcher<'a> {
 
     board: &'a mut Board,
     nodes: u64,
-    move_pool: [MoveList; MAX_PLY], // MoveLists are reset and overwritten at every search() call
 
     pv_table: [[Move; 64]; 64],
     pv_length: [usize; 64],
@@ -68,7 +67,6 @@ impl<'a> Searcher<'a> {
             board: board,
             best_move: Move::NULL_MOVE,
             nodes: 0,
-            move_pool: [MoveList::new(); MAX_PLY],
 
             pv_table: [[Move::NULL_MOVE; 64]; 64],
             pv_length: [0; 64],
@@ -140,10 +138,10 @@ impl<'a> Searcher<'a> {
         }
 
         // 3 - Generate all moves and score them.
-        let mut scores = [0i32; 256];
-        self.move_pool[ply].reset();
-        generate_all_moves(self.board, &mut self.move_pool[ply]);
-        self.score_moves::<false>(&self.move_pool[ply], ply, &mut scores);
+        let mut moves = MoveList::new();
+        let mut scores = [0; 256];
+        generate_all_moves(self.board, &mut moves);
+        self.score_moves::<false>(&mut moves, ply, &mut scores);
 
         // 4 - Null move pruning
         if !IS_PV && depth >= 3 && !in_check {
@@ -159,12 +157,9 @@ impl<'a> Searcher<'a> {
 
         // 5 - Iterate over possible moves.
         let mut legal_move_count = 0; // Flag used for mate and stalemate detection
-        for move_idx in 0..self.move_pool[ply].count() {
-            let m = {
-                let moves = &mut self.move_pool[ply];
-                Self::pick_best_move(moves, &mut scores, move_idx);
-                moves.get(move_idx)
-            };
+        for move_idx in 0..moves.count() {
+            Self::pick_best_move(&mut moves, &mut scores, move_idx);
+            let m = unsafe { moves.get_unchecked(move_idx) };
 
             let (is_capture, is_promotion) = (m.is_capture(), m.is_promotion());
 
@@ -290,7 +285,7 @@ impl<'a> Searcher<'a> {
 
         for move_idx in 0..moves.count() {
             Self::pick_best_move(&mut moves, &mut scores, move_idx);
-            let m = moves.get(move_idx);
+            let m = unsafe { moves.get_unchecked(move_idx) };
 
             self.board.make_move(m);
             if self.board.king_in_check(!self.board.side_to_move()) {
@@ -321,7 +316,8 @@ impl<'a> Searcher<'a> {
         let n = moves.count();
 
         for i in 0..n {
-            scores[i] = self.score_move::<QUIESCENCE>(moves.get(i), ply);
+            let m = unsafe { moves.get_unchecked(i) };
+            scores[i] = self.score_move::<QUIESCENCE>(m, ply);
         }
     }
 

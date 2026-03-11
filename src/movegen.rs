@@ -10,6 +10,8 @@ use crate::board::Board;
 use crate::moves::{Move, MoveKind};
 use crate::types::{Bitboard, Color, PieceKind, Square};
 
+use std::mem::MaybeUninit;
+
 const MAX_MOVES: usize = 256;
 
 /// Container for moves generated for a position.
@@ -18,19 +20,24 @@ const MAX_MOVES: usize = 256;
 /// Use `push()` to add moves in the inner loops of move generation.
 #[derive(Copy, Clone)]
 pub struct MoveList {
-    moves: [Move; MAX_MOVES], // Uninitialized for better performance
+    moves: [MaybeUninit<Move>; MAX_MOVES], // Uninitialized for better performance
     count: usize,
 }
 
 impl MoveList {
     pub fn new() -> Self {
-        Self { moves: [Move::NULL_MOVE; MAX_MOVES], count: 0 }
+        unsafe {
+            Self {
+                moves: [MaybeUninit::uninit().assume_init(); MAX_MOVES],
+                count: 0,
+            }
+        }
     }
 
     /// Pushes a move into the list.
     #[inline(always)]
     pub fn push(&mut self, m: Move) {
-        self.moves[self.count] = m;
+        self.moves[self.count].write(m);
         self.count += 1;
     }
 
@@ -48,21 +55,22 @@ impl MoveList {
 
     /// Returns the i-th move.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> Move {
+    pub unsafe fn get_unchecked(&self, i: usize) -> Move {
         debug_assert!(i < self.count, "Move index out of bounds");
-        self.moves[i]
-    }
-
-    /// Resets the count of moves. Does not delete or move data.
-    #[inline(always)]
-    pub fn reset(&mut self) {
-        self.count = 0;
+        unsafe { self.moves.get_unchecked(i).assume_init() }
     }
 
     /// Allows iteration over the move list.
     #[inline(always)]
     pub fn iter(&self) -> impl Iterator<Item = Move> + '_ {
-        self.moves[..self.count].iter().copied()
+        // Declares a pointer to the start of the array
+        let ptr = self.moves.as_ptr() as *const Move;
+
+        // Create a slice from that pointer up to 'count'
+        // SAFETY: We guarantee 'count' elements have been initialized via push()
+        let slice = unsafe { std::slice::from_raw_parts(ptr, self.count) };
+
+        slice.iter().copied()
     }
 }
 

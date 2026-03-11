@@ -117,7 +117,7 @@ impl Uci {
     ///
     /// Starts a search. Currently supports only `go depth N`.
     fn cmd_go(&mut self, args: Vec<&str>) {
-        let mut depth = 15;
+        let mut depth = 10;
 
         let mut i = 0;
         while i < args.len() {
@@ -149,7 +149,7 @@ impl Uci {
         generate_all_moves(board, &mut moves);
 
         for i in 0..moves.count() {
-            let m = moves.get(i);
+            let m = unsafe { moves.get_unchecked(i) };
 
             if m.to_string() == move_str {
                 return m;

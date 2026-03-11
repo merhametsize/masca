@@ -10,3 +10,5 @@ pub use bitboard::Bitboard;
 pub use color::Color;
 pub use piece::{Piece, PieceKind, piece_value};
 pub use square::Square;
+
+pub const MAX_PLY: usize = 128;
