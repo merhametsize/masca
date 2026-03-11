@@ -7,6 +7,7 @@ use crate::attack::AttackTables;
 use crate::eval::{self, PieceSquareTables};
 use crate::types::castling::CastlingRights;
 use crate::types::{Bitboard, Color, MAX_PLY, Move, Piece, PieceKind, Square};
+use crate::zobrist::Zobrist;
 
 /// Chess board representation.
 ///
@@ -41,7 +42,7 @@ pub struct State {
     eval_endgame: i32,
 
     #[allow(dead_code)]
-    zobrist: Bitboard,
+    zobrist: Zobrist,
 }
 
 impl Board {
@@ -63,7 +64,7 @@ impl Board {
     /// Does NOT check legality. Must be paired with `unmake_move`.
     pub fn make_move(&mut self, m: Move) {
         let (from, to) = (m.from(), m.to());
-        let (us, them) = (self.side_to_move, !self.side_to_move);
+        let us = self.side_to_move;
         let mut phase_delta = 0;
 
         self.forward_state();
@@ -79,16 +80,11 @@ impl Board {
         // ------------------------------------
         // 2 - Remove captured piece, if any
         // ------------------------------------
-        if m.is_enpassant() {
-            let captured_sq = if us == Color::White { to.south() } else { to.north() };
-            let captured_piece = Piece::new(them, PieceKind::Pawn);
+        if m.is_capture() {
+            let captured_sq =
+                if m.is_enpassant() { if us == Color::White { to.south() } else { to.north() } } else { to };
+            let captured_piece = self.piece_on_unchecked(captured_sq);
             self.remove_piece::<true>(captured_piece, captured_sq);
-            self.store_capture(captured_piece);
-            phase_delta -= eval::phase_weight(PieceKind::Pawn);
-        } else if m.is_capture() {
-            debug_assert!(self.mailbox[to].is_some()); // There must be a piece in the destination square
-            let captured_piece = self.piece_on_unchecked(to);
-            self.remove_piece::<true>(captured_piece, to);
             self.store_capture(captured_piece);
             phase_delta -= eval::phase_weight(captured_piece.kind());
         }
@@ -522,7 +518,7 @@ impl Default for State {
             eval_midgame: 0,
             eval_endgame: 0,
             phase: 0,
-            zobrist: Bitboard(0),
+            zobrist: Zobrist::new(),
         }
     }
 }

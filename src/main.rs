@@ -25,6 +25,7 @@ mod perft;
 mod search;
 mod types;
 mod uci;
+mod zobrist;
 
 #[allow(dead_code)]
 const WAC: &str = "r1bqk2r/pppp1ppp/2n2n2/1B2p3/3PP3/2N2N2/PPP2PPP/R1BQK2R w KQkq - 0 1";
