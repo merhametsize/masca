@@ -8,7 +8,6 @@
 
 use crate::board::Board;
 use crate::moves::{Move, MoveKind};
-use crate::types::castling;
 use crate::types::{Bitboard, Color, PieceKind, Square};
 
 const MAX_MOVES: usize = 256;
@@ -363,14 +362,12 @@ pub fn generate_pawn_quiets<const WHITE: bool>(board: &Board, moves: &mut MoveLi
 
 /// Generates castling moves, if possible.  
 pub fn generate_castling<const WHITE: bool>(board: &Board, moves: &mut MoveList) {
-    use castling::can_castle;
-
     let rights = board.castling_rights();
     let occupancy = board.occupied_squares();
 
     if WHITE {
         // King side (e1g1)
-        if can_castle(occupancy, rights, Color::White, true) {
+        if rights.can_castle(occupancy, Color::White, true) {
             if !board.is_square_attacked(Square::E1, Color::Black) // King square first for tiny speedup
                 && !board.is_square_attacked(Square::F1, Color::Black)
                 && !board.is_square_attacked(Square::G1, Color::Black)
@@ -380,7 +377,7 @@ pub fn generate_castling<const WHITE: bool>(board: &Board, moves: &mut MoveList)
         }
 
         // Queen side (e1c1)
-        if can_castle(occupancy, rights, Color::White, false) {
+        if rights.can_castle(occupancy, Color::White, false) {
             if !board.is_square_attacked(Square::E1, Color::Black) // King square first for tiny speedup
                 && !board.is_square_attacked(Square::D1, Color::Black)
                 && !board.is_square_attacked(Square::C1, Color::Black)
@@ -390,7 +387,7 @@ pub fn generate_castling<const WHITE: bool>(board: &Board, moves: &mut MoveList)
         }
     } else {
         // King side (e8g8)
-        if can_castle(occupancy, rights, Color::Black, true) {
+        if rights.can_castle(occupancy, Color::Black, true) {
             if !board.is_square_attacked(Square::E8, Color::White) // King square first for tiny speedup
                 && !board.is_square_attacked(Square::F8, Color::White)
                 && !board.is_square_attacked(Square::G8, Color::White)
@@ -400,7 +397,7 @@ pub fn generate_castling<const WHITE: bool>(board: &Board, moves: &mut MoveList)
         }
 
         // Queen side (e8c8)
-        if can_castle(occupancy, rights, Color::Black, false) {
+        if rights.can_castle(occupancy, Color::Black, false) {
             if !board.is_square_attacked(Square::E8, Color::White) // King square first for tiny speedup
                 && !board.is_square_attacked(Square::D8, Color::White)
                 && !board.is_square_attacked(Square::C8, Color::White)

@@ -6,7 +6,7 @@
 use crate::attack::AttackTables;
 use crate::eval::{self, PieceSquareTables};
 use crate::moves::Move;
-use crate::types::castling;
+use crate::types::castling::CastlingRights;
 use crate::types::{Bitboard, Color, Piece, PieceKind, Square};
 
 const MAX_PLY: usize = 128;
@@ -34,7 +34,7 @@ pub struct Board {
 /// It is intended to be pushed onto `state_stack` during move execution.
 #[derive(Copy, Clone)]
 pub struct State {
-    castling: u8, // From LSB on, white-king, white-queen, black-king, black-queen side castling
+    castling: CastlingRights,
     en_passant: Option<Square>,
     halfmove: usize,
     captured: Option<Piece>, // Which piece was captured in the last move
@@ -126,9 +126,7 @@ impl Board {
         // ---------------------------------------
         // 6 - Update castling rights (branchless)
         // ---------------------------------------
-        use castling::RIGHTS_UPDATE_MASK;
-        self.state_stack[self.state_idx].castling &=
-            RIGHTS_UPDATE_MASK[from as usize] & RIGHTS_UPDATE_MASK[to as usize];
+        self.state_stack[self.state_idx].castling.update_rights(from, to);
 
         // ---------------------------------------
         // 7 -    En passant activation
@@ -441,7 +439,7 @@ impl Board {
 
     /// Returns the castling rights, encoded in a u8.
     #[inline(always)]
-    pub fn castling_rights(&self) -> u8 {
+    pub fn castling_rights(&self) -> CastlingRights {
         self.state_stack[self.state_idx].castling
     }
 
@@ -511,13 +509,14 @@ impl Board {
         };
 
         // ===== Parse castling rights =====
-        let mut castling = 0u8;
+        let mut castling = CastlingRights::new();
+        castling.zero();
         for ch in castling_part.chars() {
             match ch {
-                'K' => castling |= 1 << 0,
-                'Q' => castling |= 1 << 1,
-                'k' => castling |= 1 << 2,
-                'q' => castling |= 1 << 3,
+                'K' => castling.add_white_oo(),
+                'Q' => castling.add_white_ooo(),
+                'k' => castling.add_black_oo(),
+                'q' => castling.add_black_ooo(),
                 '-' => {}
                 _ => return Err("Invalid castling"),
             }
@@ -593,7 +592,7 @@ impl Default for Board {
 impl Default for State {
     fn default() -> Self {
         Self {
-            castling: 0,
+            castling: CastlingRights::default(),
             en_passant: None,
             halfmove: 0,
             captured: Option::None,
