@@ -106,11 +106,6 @@ impl Square {
     pub const fn mirror_rank(self) -> Square {
         unsafe { std::mem::transmute((self as u8) ^ 56) }
     }
-
-    #[inline(always)]
-    pub const fn as_u64(self) -> u64 {
-        self as u64
-    }
 }
 
 impl fmt::Display for Square {

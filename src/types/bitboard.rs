@@ -80,6 +80,12 @@ impl Bitboard {
     pub fn square(&self) -> Square {
         Square::new(self.lsb() as u8)
     }
+
+    /// Used for const compile-time ORing.
+    #[inline(always)]
+    pub const fn or(self, other: Self) -> Self {
+        Bitboard(self.0 | other.0)
+    }
 }
 
 impl fmt::Display for Bitboard {

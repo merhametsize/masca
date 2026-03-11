@@ -35,16 +35,16 @@ pub const RIGHTS_BLACK_OO: u8 = 0b0100;
 pub const RIGHTS_BLACK_OOO: u8 = 0b1000;
 
 /// Squares F1 and G1.
-const PATH_WHITE_OO: Bitboard = Bitboard(Square::F1.as_u64() | Square::G1.as_u64());
+const PATH_WHITE_OO: Bitboard = Square::F1.bb().or(Square::G1.bb());
 
 /// Squares B1, C1, and D1.
-const PATH_WHITE_OOO: Bitboard = Bitboard(Square::B1.as_u64() | Square::C1.as_u64() | Square::D1.as_u64());
+const PATH_WHITE_OOO: Bitboard = Square::B1.bb().or(Square::C1.bb()).or(Square::D1.bb());
 
 /// Squares F8 and G8.
-const PATH_BLACK_OO: Bitboard = Bitboard(Square::F8.as_u64() | Square::G8.as_u64());
+const PATH_BLACK_OO: Bitboard = Square::F8.bb().or(Square::G8.bb());
 
 /// Squares B8, C8, and D8.
-const PATH_BLACK_OOO: Bitboard = Bitboard(Square::B8.as_u64() | Square::C8.as_u64() | Square::D8.as_u64());
+const PATH_BLACK_OOO: Bitboard = Square::B8.bb().or(Square::C8.bb()).or(Square::D8.bb());
 
 #[repr(transparent)] // Treat the struct exactly like a u8
 #[derive(Copy, Clone)]

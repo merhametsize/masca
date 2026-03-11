@@ -41,27 +41,7 @@ const TACTICAL_MATE: &str = "r1b1k2r/pppp1ppp/2n2n2/1B2p3/4P3/2N5/PPPP1PPP/R1BQK
 const BOH: &str = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
 
 fn main() {
-    //use crate::uci::Uci;
-    //let mut uci = Uci::new();
-    //uci.run();
-    test_perft();
-    test_search();
-}
-
-fn test_search() {
-    use board::Board;
-    use search::Searcher;
-
-    let mut board = Board::new();
-    board.from_fen(KIWIPETE).unwrap();
-    board.print();
-
-    let mut searcher = Searcher::new(&mut board);
-    searcher.iterative_deepening(11);
-}
-
-fn test_perft() {
-    use perft::perft_n;
-
-    perft_n(5);
+    use crate::uci::Uci;
+    let mut uci = Uci::new();
+    uci.run();
 }
