@@ -7,8 +7,7 @@
 //! All inner loops are optimized for branchless execution, bitboard manipulation, and monomorphization
 
 use crate::board::Board;
-use crate::moves::{Move, MoveKind};
-use crate::types::{Bitboard, Color, PieceKind, Square};
+use crate::types::{Bitboard, Color, Move, MoveKind, PieceKind, Square};
 
 use std::mem::MaybeUninit;
 

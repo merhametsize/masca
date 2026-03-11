@@ -21,7 +21,6 @@ mod eval;
 mod fen;
 mod magics;
 mod movegen;
-mod moves;
 mod perft;
 mod search;
 mod types;

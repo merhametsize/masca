@@ -7,8 +7,8 @@ use std::io::{self, BufRead};
 
 use crate::board::Board;
 use crate::movegen::{MoveList, generate_all_moves};
-use crate::moves::Move;
 use crate::search::Searcher;
+use crate::types::Move;
 
 /// UCI controller.
 ///

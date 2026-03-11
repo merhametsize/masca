@@ -3,11 +3,13 @@
 pub mod bitboard;
 pub mod castling;
 pub mod color;
+pub mod moves;
 pub mod piece;
 pub mod square;
 
 pub use bitboard::Bitboard;
 pub use color::Color;
+pub use moves::{Move, MoveKind};
 pub use piece::{Piece, PieceKind, piece_value};
 pub use square::Square;
 

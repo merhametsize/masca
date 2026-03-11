@@ -15,9 +15,8 @@
 //! Move lists are stored in a preallocated per-ply pool to avoid stack allocations during search.
 use crate::board::Board;
 use crate::movegen::{MoveList, generate_all_captures, generate_all_moves};
-use crate::moves::Move;
 use crate::types;
-use crate::types::{Color, PieceKind, Square};
+use crate::types::{Color, Move, PieceKind, Square};
 
 const SCORE_INF: i32 = 32_000;
 const SCORE_MATE: i32 = 29_000;
@@ -267,6 +266,7 @@ impl<'a> Searcher<'a> {
     fn quiescence(&mut self, ply: usize, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
+        // 1 - STAND PAT: Only allowed if NOT in check.
         let in_check = self.board.king_in_check(self.board.side_to_move());
         if !in_check {
             let eval = self.board.evaluate_relative();
@@ -278,11 +278,20 @@ impl<'a> Searcher<'a> {
             }
         }
 
+        // 2 - Move generation
         let mut moves = MoveList::new();
+        if in_check {
+            generate_all_moves(self.board, &mut moves);
+        } else {
+            generate_all_captures(self.board, &mut moves); // Not in check --> we only care about captures
+        }
+
+        // 3 - Move ordering
         let mut scores = [0i32; 256];
-        generate_all_captures(self.board, &mut moves);
         self.score_moves::<false>(&moves, ply, &mut scores);
 
+        // 4 - Recursion
+        let mut legal_move_count = 0;
         for move_idx in 0..moves.count() {
             Self::pick_best_move(&mut moves, &mut scores, move_idx);
             let m = unsafe { moves.get_unchecked(move_idx) };
@@ -296,12 +305,19 @@ impl<'a> Searcher<'a> {
             let score = -self.quiescence(ply + 1, -beta, -alpha);
             self.board.unmake_move(m);
 
+            legal_move_count += 1;
+
             if score >= beta {
                 return beta;
             }
             if score > alpha {
                 alpha = score;
             }
+        }
+
+        // 5 - Shah mat
+        if in_check && legal_move_count == 0 {
+            return -SCORE_MATE + ply as i32;
         }
 
         alpha

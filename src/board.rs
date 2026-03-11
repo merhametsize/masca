@@ -5,9 +5,8 @@
 
 use crate::attack::AttackTables;
 use crate::eval::{self, PieceSquareTables};
-use crate::moves::Move;
 use crate::types::castling::CastlingRights;
-use crate::types::{Bitboard, Color, MAX_PLY, Piece, PieceKind, Square};
+use crate::types::{Bitboard, Color, MAX_PLY, Move, Piece, PieceKind, Square};
 
 /// Chess board representation.
 ///
