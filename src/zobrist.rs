@@ -1,10 +1,7 @@
-// zobrist.rs
 //! Zobrist hashing for fast incremental board hash updates.
 //!
 //! Generates 64-bit random keys for all pieces, castling rights, en-passant files, and side to move.
 //! Provides a `Zobrist` struct holding the current key.
-
-#![allow(dead_code)]
 
 use crate::types::{Color, PieceKind, Square};
 use rand::rngs::StdRng;
@@ -62,13 +59,19 @@ impl ZobristTables {
 /// Current board hash.
 #[derive(Copy, Clone, Default)]
 pub struct Zobrist {
-    pub key: u64,
+    key: u64,
 }
 
 impl Zobrist {
     /// Creates an empty hash.
     pub fn new() -> Self {
         Self { key: 0 }
+    }
+
+    /// Assigns a value to the zobrist key.
+    #[inline(always)]
+    pub fn set(&mut self, key: u64) {
+        self.key = key;
     }
 
     /// XOR a value into the hash.

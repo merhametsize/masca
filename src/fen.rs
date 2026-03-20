@@ -39,6 +39,9 @@ impl Board {
             }
         }
 
+        // ===== zobrist =====
+        self.compute_zobrist();
+
         // ===== side =====
         let side_to_move = match side_part {
             "w" => Color::White,

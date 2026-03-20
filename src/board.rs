@@ -7,7 +7,7 @@ use crate::attack::AttackTables;
 use crate::eval::{self, PieceSquareTables};
 use crate::types::castling::CastlingRights;
 use crate::types::{Bitboard, Color, MAX_PLY, Move, Piece, PieceKind, Square};
-use crate::zobrist::Zobrist;
+use crate::zobrist::{Zobrist, ZobristTables};
 
 /// Chess board representation.
 ///
@@ -24,6 +24,7 @@ pub struct Board {
 
     psqt: PieceSquareTables,
     pub attack_tables: AttackTables,
+    zobrist_tables: ZobristTables,
 }
 
 /// Incremental game state information.
@@ -41,7 +42,6 @@ pub struct State {
     eval_midgame: i32,
     eval_endgame: i32,
 
-    #[allow(dead_code)]
     zobrist: Zobrist,
 }
 
@@ -76,6 +76,7 @@ impl Board {
         let moved_piece = self.piece_on_unchecked(from);
         let moved_kind = moved_piece.kind();
         self.remove_piece::<true>(moved_piece, from);
+        self.zobrist_xor_piece(moved_piece, from);
 
         // ------------------------------------
         // 2 - Remove captured piece, if any
@@ -87,6 +88,7 @@ impl Board {
             self.remove_piece::<true>(captured_piece, captured_sq);
             self.store_capture(captured_piece);
             phase_delta -= eval::phase_weight(captured_piece.kind());
+            self.zobrist_xor_piece(captured_piece, captured_sq);
         }
 
         // ------------------------------------
@@ -104,8 +106,10 @@ impl Board {
             let promoted_piece = Piece::new(us, promoted_kind);
             self.add_piece::<true>(promoted_piece, to); // Yaaaaas queeeeen!
             phase_delta += eval::phase_weight(promoted_kind) - eval::phase_weight(PieceKind::Pawn);
+            self.zobrist_xor_piece(promoted_piece, to);
         } else {
             self.add_piece::<true>(moved_piece, to); // Add the moved piece if quiet or capture
+            self.zobrist_xor_piece(moved_piece, to);
         }
 
         // ------------------------------------
@@ -123,12 +127,17 @@ impl Board {
             let rook = self.piece_on_unchecked(rook_from);
             debug_assert!(rook.kind() == PieceKind::Rook);
             self.move_piece::<true>(rook, rook_from, rook_to);
+            self.zobrist_xor_piece(rook, rook_from);
+            self.zobrist_xor_piece(rook, rook_to);
         }
 
         // ---------------------------------------
         // 6 - Update castling rights (branchless)
         // ---------------------------------------
         self.state_stack[self.state_idx].castling.update_rights(from, to);
+        let old = self.state_stack[self.state_idx - 1].castling.encoding();
+        let new = self.state_stack[self.state_idx].castling.encoding();
+        self.zobrist_update_castling(old, new);
 
         // ---------------------------------------
         // 7 -    En passant activation
@@ -137,23 +146,22 @@ impl Board {
             let ep_sq = if us == Color::White { to.south() } else { to.north() };
             self.state_stack[self.state_idx].en_passant = Some(ep_sq);
         }
+        let old_ep = self.state_stack[self.state_idx - 1].en_passant;
+        let new_ep = self.state_stack[self.state_idx].en_passant;
+        self.zobrist_update_ep(old_ep, new_ep);
 
         // ---------------------------------------
-        // 8 -     Update zobrist key
-        // ---------------------------------------
-        //TODO
-
-        // ---------------------------------------
-        // 9 -           Update phase
+        // 8 -           Update phase
         // ---------------------------------------
         // Phase is updated at the end so to avoid evaluation instability
         let state = &mut self.state_stack[self.state_idx];
         state.phase += phase_delta;
 
         // ---------------------------------------
-        // 10 -           Flip side
+        // 9 -           Flip side
         // ---------------------------------------
         self.side_to_move = !self.side_to_move;
+        self.zobrist_flip_side();
     }
 
     /// Reverts the last move incrementally.
@@ -470,6 +478,75 @@ impl Board {
         self.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
     }
 
+    /// Recomputes the zobrist key of the position from scratch.
+    pub fn compute_zobrist(&mut self) {
+        let mut key = 0u64;
+
+        // Pieces
+        for sq in Square::ALL {
+            if let Some(piece) = self.mailbox[sq] {
+                let kind = piece.kind();
+                let color = piece.color();
+                key ^= self.zobrist_tables.pieces[kind][color][sq];
+            }
+        }
+
+        // Side
+        if self.side_to_move == Color::Black {
+            key ^= self.zobrist_tables.side;
+        }
+
+        // Castling
+        let castling = self.castling_rights().encoding();
+        key ^= self.zobrist_tables.castling[castling as usize];
+
+        // En passant
+        if let Some(ep) = self.en_passant_square() {
+            key ^= self.zobrist_tables.en_passant[ep.file() as usize];
+        }
+
+        self.state_stack[self.state_idx].zobrist.set(key);
+    }
+
+    /// Adds or removes a piece contribution to the zobrist key.
+    #[inline(always)]
+    fn zobrist_xor_piece(&mut self, piece: Piece, sq: Square) {
+        let z = &mut self.state_stack[self.state_idx].zobrist;
+        let key = self.zobrist_tables.pieces[piece.kind()][piece.color()][sq];
+        z.xor(key);
+    }
+
+    /// Updates the side to mvoe in the zobrist key.
+    #[inline(always)]
+    fn zobrist_flip_side(&mut self) {
+        let z = &mut self.state_stack[self.state_idx].zobrist;
+        let key = self.zobrist_tables.side;
+        z.xor(key);
+    }
+
+    /// Updates castling in the zobrist key.
+    #[inline(always)]
+    fn zobrist_update_castling(&mut self, old: u8, new: u8) {
+        let z = &mut self.state_stack[self.state_idx].zobrist;
+        let old_key = self.zobrist_tables.castling[old as usize];
+        let new_key = self.zobrist_tables.castling[new as usize];
+        z.xor(old_key);
+        z.xor(new_key);
+    }
+
+    /// Updates the zobrist key after en passant.
+    #[inline(always)]
+    fn zobrist_update_ep(&mut self, old: Option<Square>, new: Option<Square>) {
+        let z = &mut self.state_stack[self.state_idx].zobrist;
+
+        if let Some(sq) = old {
+            z.xor(self.zobrist_tables.en_passant[sq.file() as usize]);
+        }
+        if let Some(sq) = new {
+            z.xor(self.zobrist_tables.en_passant[sq.file() as usize]);
+        }
+    }
+
     /// Prints the board to console terminal for debug.
     pub fn print(&self) {
         println!("Side to move: {:?}", self.side_to_move);
@@ -504,6 +581,7 @@ impl Default for Board {
 
             psqt: PieceSquareTables::new(),
             attack_tables: AttackTables::new(),
+            zobrist_tables: ZobristTables::new(),
         }
     }
 }

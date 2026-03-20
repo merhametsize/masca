@@ -58,6 +58,12 @@ impl CastlingRights {
         Self { encoding: 0b1111 }
     }
 
+    // Returns the internal u8 encoding.
+    #[inline(always)]
+    pub fn encoding(&self) -> u8 {
+        self.encoding
+    }
+
     /// Removes all castling rights.
     #[inline(always)]
     pub fn zero(&mut self) {
