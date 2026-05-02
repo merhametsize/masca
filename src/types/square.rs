@@ -112,8 +112,8 @@ impl fmt::Display for Square {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let idx = *self as u8;
 
-        let file = (idx % 8) as u8;
-        let rank = (idx / 8) as u8;
+        let file = idx % 8;
+        let rank = idx / 8;
 
         let file_char = (b'a' + file) as char;
         let rank_char = (b'1' + rank) as char;

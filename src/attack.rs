@@ -19,8 +19,26 @@ pub struct AttackTables {
     pub magic_tables: MagicTables,
 }
 
-const KNIGHT_DELTAS: [(i8, i8); 8] = [(2, 1), (2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2), (-2, 1), (-2, -1)];
-const KING_DELTAS: [(i8, i8); 8] = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)];
+const KNIGHT_DELTAS: [(i8, i8); 8] = [
+    (2, 1),
+    (2, -1),
+    (1, 2),
+    (1, -2),
+    (-1, 2),
+    (-1, -2),
+    (-2, 1),
+    (-2, -1),
+];
+const KING_DELTAS: [(i8, i8); 8] = [
+    (0, 1),
+    (1, 1),
+    (1, 0),
+    (1, -1),
+    (0, -1),
+    (-1, -1),
+    (-1, 0),
+    (-1, 1),
+];
 
 impl AttackTables {
     pub fn new() -> Self {
@@ -114,7 +132,11 @@ impl AttackTables {
         use std::io::{Write, stdout};
         let mut out = stdout();
 
-        fn print_section<W: Write>(out: &mut W, title: &str, boards: &[Bitboard]) -> std::io::Result<()> {
+        fn print_section<W: Write>(
+            out: &mut W,
+            title: &str,
+            boards: &[Bitboard],
+        ) -> std::io::Result<()> {
             writeln!(out, "\n=== {} ===", title)?;
             // Print 4 bitboards per row
             let per_row = 4;
@@ -136,15 +158,35 @@ impl AttackTables {
         print_section(&mut out, "KING", &self.king).unwrap();
 
         // Pawns
-        print_section(&mut out, "PAWN CAPTURE (WHITE)", &self.pawn_capture[Color::White]).unwrap();
+        print_section(
+            &mut out,
+            "PAWN CAPTURE (WHITE)",
+            &self.pawn_capture[Color::White],
+        )
+        .unwrap();
         print_section(&mut out, "PAWN PUSH (WHITE)", &self.pawn_push[Color::White]).unwrap();
-        print_section(&mut out, "PAWN DOUBLE PUSH (WHITE)", &self.pawn_double_push[Color::White]).unwrap();
+        print_section(
+            &mut out,
+            "PAWN DOUBLE PUSH (WHITE)",
+            &self.pawn_double_push[Color::White],
+        )
+        .unwrap();
 
-        print_section(&mut out, "PAWN CAPTURE (BLACK)", &self.pawn_capture[Color::Black]).unwrap();
+        print_section(
+            &mut out,
+            "PAWN CAPTURE (BLACK)",
+            &self.pawn_capture[Color::Black],
+        )
+        .unwrap();
         print_section(&mut out, "PAWN PUSH (BLACK)", &self.pawn_push[Color::Black]).unwrap();
-        print_section(&mut out, "PAWN DOUBLE PUSH (BLACK)", &self.pawn_double_push[Color::Black]).unwrap();
+        print_section(
+            &mut out,
+            "PAWN DOUBLE PUSH (BLACK)",
+            &self.pawn_double_push[Color::Black],
+        )
+        .unwrap();
 
-        println!("");
+        println!();
         self.magic_tables.print();
     }
 }

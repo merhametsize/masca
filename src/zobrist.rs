@@ -28,7 +28,7 @@ impl ZobristTables {
         let mut pieces = [[[0u64; 64]; 2]; PieceKind::NUM];
         let mut castling = [0u64; NUM_CASTLING];
         let mut en_passant = [0u64; NUM_EP_FILES];
-        let side;
+        let side = rng.next_u64();
 
         // Fill pieces table
         for piece_kind in PieceKind::ALL {
@@ -40,19 +40,21 @@ impl ZobristTables {
         }
 
         // Castling
-        for i in 0..NUM_CASTLING {
-            castling[i] = rng.next_u64();
+        for n in castling.iter_mut() {
+            *n = rng.next_u64();
         }
 
         // En-passant
-        for i in 0..NUM_EP_FILES {
-            en_passant[i] = rng.next_u64();
+        for n in en_passant.iter_mut() {
+            *n = rng.next_u64();
         }
 
-        // Side
-        side = rng.next_u64();
-
-        Self { pieces, castling, en_passant, side }
+        Self {
+            pieces,
+            castling,
+            en_passant,
+            side,
+        }
     }
 }
 

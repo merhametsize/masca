@@ -56,8 +56,8 @@ pub struct MagicTables {
 
     pub rook_attacks: [Bitboard; ROOK_MAP_SIZE], // Flat rook attack table, indexed by offsets[sq] + magic_index
     pub bishop_attacks: [Bitboard; BISHOP_MAP_SIZE], // Flat bishop attack table, indexed by offsets[sq] + magic_index
-    pub rook_offsets: [usize; 64],               // Starting index in `rook_attacks` for each square
-    pub bishop_offsets: [usize; 64],             // Starting index in `bishop_attacks` for each square
+    pub rook_offsets: [usize; 64], // Starting index in `rook_attacks` for each square
+    pub bishop_offsets: [usize; 64], // Starting index in `bishop_attacks` for each square
 }
 
 impl MagicTables {
@@ -108,8 +108,16 @@ impl MagicTables {
         );
 
         // Invariant check
-        let total_rook_slots: usize = self.rook_masks.iter().map(|m| 1usize << m.0.count_ones()).sum();
-        let total_bishop_slots: usize = self.bishop_masks.iter().map(|m| 1usize << m.0.count_ones()).sum();
+        let total_rook_slots: usize = self
+            .rook_masks
+            .iter()
+            .map(|m| 1usize << m.0.count_ones())
+            .sum();
+        let total_bishop_slots: usize = self
+            .bishop_masks
+            .iter()
+            .map(|m| 1usize << m.0.count_ones())
+            .sum();
         assert_eq!(total_rook_slots, ROOK_MAP_SIZE);
         assert_eq!(total_bishop_slots, BISHOP_MAP_SIZE);
     }
@@ -126,7 +134,10 @@ impl MagicTables {
     ///     index = offsets[sq] + ((occ & mask) * magic >> shift)
     /// A flat table is preferred to a matrix since different squares have a different number of relevant occupancies.
     fn search_loop(
-        masks: &[Bitboard; 64], attacks: &Vec<Vec<Bitboard>>, magics: &mut [u64; 64], offsets: &mut [usize; 64],
+        masks: &[Bitboard; 64],
+        attacks: &[Vec<Bitboard>],
+        magics: &mut [u64; 64],
+        offsets: &mut [usize; 64],
         flat_table: &mut [Bitboard],
     ) {
         let mut offset = 0usize;
@@ -201,8 +212,10 @@ impl MagicTables {
         let from_rank = square.rank() as i8;
         let from_file = square.file() as i8;
 
-        let rank_edges = (Bitboard::rank_1() | Bitboard::rank_8()) & !Bitboard::square_to_rank(square);
-        let file_edges = (Bitboard::file_a() | Bitboard::file_h()) & !Bitboard::square_to_file(square);
+        let rank_edges =
+            (Bitboard::rank_1() | Bitboard::rank_8()) & !Bitboard::square_to_rank(square);
+        let file_edges =
+            (Bitboard::file_a() | Bitboard::file_h()) & !Bitboard::square_to_file(square);
         let edges = rank_edges | file_edges;
 
         for &(delta_rank, delta_file) in deltas {
@@ -223,20 +236,29 @@ impl MagicTables {
     // Generates all possible rook attacks for all squares and occupancies.
     // Used in magic number generation to populate the flat attack tables.
     fn generate_all_rook_attacks(&self) -> Vec<Vec<Bitboard>> {
-        (0..64).map(|idx| Square::new(idx)).map(|sq| Self::attacks_for_square(sq, &ROOK_DELTAS)).collect()
+        (0..64)
+            .map(Square::new)
+            .map(|sq| Self::attacks_for_square(sq, &ROOK_DELTAS))
+            .collect()
     }
 
     // Generates all possible bishop attacks for all squares and occupancies.
     // Used in magic number generation to populate the flat attack tables.
     fn generate_all_bishop_attacks(&self) -> Vec<Vec<Bitboard>> {
-        (0..64).map(|idx| Square::new(idx)).map(|sq| Self::attacks_for_square(sq, &BISHOP_DELTAS)).collect()
+        (0..64)
+            .map(Square::new)
+            .map(|sq| Self::attacks_for_square(sq, &BISHOP_DELTAS))
+            .collect()
     }
 
     // Generates all attacks for a specific square and piece (given by deltas)
     fn attacks_for_square(square: Square, deltas: &[(i8, i8)]) -> Vec<Bitboard> {
         let mask = Self::relevant_occupancy_mask(square, deltas);
         let occupancies = Self::enumerate_occupancies(mask);
-        occupancies.iter().map(|occ| Self::sliding_attack(square, deltas, *occ)).collect()
+        occupancies
+            .iter()
+            .map(|occ| Self::sliding_attack(square, deltas, *occ))
+            .collect()
     }
 
     /// Enumerates all possible occupancies for a given relevant mask.
@@ -277,7 +299,7 @@ impl MagicTables {
             let mut to_rank = from_rank + delta_rank;
             let mut to_file = from_file + delta_file;
 
-            while to_rank >= 0 && to_rank < 8 && to_file >= 0 && to_file < 8 {
+            while (0..8).contains(&to_rank) && (0..8).contains(&to_file) {
                 let sq_index = (to_rank * 8 + to_file) as u8;
                 let sq = Square::new(sq_index);
                 attacks |= sq.bb();
@@ -300,7 +322,11 @@ impl MagicTables {
         for sq in 0..64 {
             println!(
                 "{:>6} | 0x{:016X} {:>8} | 0x{:016X} {:>8}",
-                sq, self.rook_magics[sq], self.rook_offsets[sq], self.bishop_magics[sq], self.bishop_offsets[sq],
+                sq,
+                self.rook_magics[sq],
+                self.rook_offsets[sq],
+                self.bishop_magics[sq],
+                self.bishop_offsets[sq],
             );
         }
 

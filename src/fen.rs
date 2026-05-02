@@ -3,7 +3,7 @@ use crate::types::castling::CastlingRights;
 use crate::types::{Color, Piece, Square};
 
 impl Board {
-    pub fn from_fen(&mut self, fen: &str) -> Result<(), &'static str> {
+    pub fn build_from_fen(&mut self, fen: &str) -> Result<(), &'static str> {
         let mut parts = fen.split_whitespace();
 
         let board_part = parts.next().ok_or("FEN missing board")?;

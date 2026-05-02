@@ -128,7 +128,8 @@ impl Attacker for Tor {
         // sub rcx, 64
         //
         // 1 load + 2 ALU = ~9 cycles    <---->         2 loads = ~10 cycles
-        let idx = ((relevant_occupancy.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
+        let idx =
+            ((relevant_occupancy.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
 
         let offset = mt.rook_offsets[from];
         mt.rook_attacks[offset + idx]
@@ -152,7 +153,8 @@ impl Attacker for Alfè {
         let relevant_occupancy = board.occupied_squares() & mask;
         let magic = mt.bishop_magics[from];
 
-        let idx = ((relevant_occupancy.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
+        let idx =
+            ((relevant_occupancy.0.wrapping_mul(magic)) >> (64 - mask.0.count_ones())) as usize;
 
         let offset = mt.bishop_offsets[from];
         mt.bishop_attacks[offset + idx]
@@ -167,7 +169,7 @@ impl Attacker for Argina {
 
     #[inline(always)]
     fn get_attacks(from: Square, board: &Board) -> Bitboard {
-        Tor::get_attacks(from, &board) | Alfè::get_attacks(from, &board)
+        Tor::get_attacks(from, board) | Alfè::get_attacks(from, board)
     }
 }
 
@@ -256,9 +258,20 @@ pub fn generate_black_moves(board: &Board, moves: &mut MoveList) {
 /// - Fully monomorphized: `if WHITE` and `if CAPTURE` branches are removed by the compiler
 /// - Suitable for knights, kings, rooks, bishops, and queens (pawns are special)
 #[inline(always)]
-pub fn generate_moves<P: Attacker, const WHITE: bool, const CAPTURE: bool>(board: &Board, moves: &mut MoveList) {
-    let us = if WHITE { board.color(Color::White) } else { board.color(Color::Black) };
-    let them = if WHITE { board.color(Color::Black) } else { board.color(Color::White) };
+pub fn generate_moves<P: Attacker, const WHITE: bool, const CAPTURE: bool>(
+    board: &Board,
+    moves: &mut MoveList,
+) {
+    let us = if WHITE {
+        board.color(Color::White)
+    } else {
+        board.color(Color::Black)
+    };
+    let them = if WHITE {
+        board.color(Color::Black)
+    } else {
+        board.color(Color::White)
+    };
 
     let mut attackers = board.piece(P::TYPE) & us;
     let target_mask = if CAPTURE {
@@ -270,7 +283,7 @@ pub fn generate_moves<P: Attacker, const WHITE: bool, const CAPTURE: bool>(board
 
     while attackers != Bitboard(0) {
         let from = Square::new(attackers.pop_lsb() as u8);
-        let mut attacks = P::get_attacks(from, &board) & target_mask;
+        let mut attacks = P::get_attacks(from, board) & target_mask;
 
         while attacks != Bitboard(0) {
             let to = Square::new(attacks.pop_lsb() as u8);
@@ -297,15 +310,28 @@ pub fn generate_pawn_captures<const WHITE: bool>(board: &Board, moves: &mut Move
     let our_color = if WHITE { Color::White } else { Color::Black };
     let mut pawns = board.piece(PieceKind::Pawn) & board.color(our_color);
 
-    let them = if WHITE { board.color(Color::Black) } else { board.color(Color::White) };
-    let promotion_rank = if WHITE { Bitboard(0xFF00000000000000u64) } else { Bitboard(0x00000000000000FFu64) };
+    let them = if WHITE {
+        board.color(Color::Black)
+    } else {
+        board.color(Color::White)
+    };
+    let promotion_rank = if WHITE {
+        Bitboard(0xFF00000000000000u64)
+    } else {
+        Bitboard(0x00000000000000FFu64)
+    };
 
-    let ep_square = if let Some(ep_square) = board.en_passant_square() { ep_square.bb() } else { Bitboard(0) };
+    let ep_square = if let Some(ep_square) = board.en_passant_square() {
+        ep_square.bb()
+    } else {
+        Bitboard(0)
+    };
 
     while pawns != Bitboard(0) {
         let from = Square::new(pawns.pop_lsb() as u8);
         let enemy_king = board.piece(PieceKind::King) & them;
-        let mut attacks = board.attack_tables.pawn_capture[our_color][from] & (them & !enemy_king | ep_square);
+        let mut attacks =
+            board.attack_tables.pawn_capture[our_color][from] & (them & !enemy_king | ep_square);
 
         while attacks != Bitboard(0) {
             let to = Square::new(attacks.lsb() as u8);
@@ -344,7 +370,11 @@ pub fn generate_pawn_quiets<const WHITE: bool>(board: &Board, moves: &mut MoveLi
     let pawn_pushes = &board.attack_tables.pawn_push[our_color];
     let pawn_double = &board.attack_tables.pawn_double_push[our_color];
 
-    let promotion_rank = if WHITE { Bitboard(0xFF00000000000000u64) } else { Bitboard(0x00000000000000FFu64) };
+    let promotion_rank = if WHITE {
+        Bitboard(0xFF00000000000000u64)
+    } else {
+        Bitboard(0x00000000000000FFu64)
+    };
     let empty_bb = board.empty_squares();
 
     while pawns != Bitboard(0) {
@@ -381,43 +411,55 @@ pub fn generate_castling<const WHITE: bool>(board: &Board, moves: &mut MoveList)
 
     if WHITE {
         // King side (e1g1)
-        if rights.can_castle(occupancy, Color::White, true) {
-            if !board.is_square_attacked(Square::E1, Color::Black) // King square first for tiny speedup
-                && !board.is_square_attacked(Square::F1, Color::Black)
-                && !board.is_square_attacked(Square::G1, Color::Black)
-            {
-                moves.push(Move::new_special(Square::E1, Square::G1, MoveKind::KingCastle));
-            }
+        if rights.can_castle(occupancy, Color::White, true)
+            && !board.is_square_attacked(Square::E1, Color::Black)
+            && !board.is_square_attacked(Square::F1, Color::Black)
+            && !board.is_square_attacked(Square::G1, Color::Black)
+        {
+            moves.push(Move::new_special(
+                Square::E1,
+                Square::G1,
+                MoveKind::KingCastle,
+            ));
         }
 
         // Queen side (e1c1)
-        if rights.can_castle(occupancy, Color::White, false) {
-            if !board.is_square_attacked(Square::E1, Color::Black) // King square first for tiny speedup
-                && !board.is_square_attacked(Square::D1, Color::Black)
-                && !board.is_square_attacked(Square::C1, Color::Black)
-            {
-                moves.push(Move::new_special(Square::E1, Square::C1, MoveKind::QueenCastle));
-            }
+        if rights.can_castle(occupancy, Color::White, false)
+            && !board.is_square_attacked(Square::E1, Color::Black)
+            && !board.is_square_attacked(Square::D1, Color::Black)
+            && !board.is_square_attacked(Square::C1, Color::Black)
+        {
+            moves.push(Move::new_special(
+                Square::E1,
+                Square::C1,
+                MoveKind::QueenCastle,
+            ));
         }
     } else {
         // King side (e8g8)
-        if rights.can_castle(occupancy, Color::Black, true) {
-            if !board.is_square_attacked(Square::E8, Color::White) // King square first for tiny speedup
-                && !board.is_square_attacked(Square::F8, Color::White)
-                && !board.is_square_attacked(Square::G8, Color::White)
-            {
-                moves.push(Move::new_special(Square::E8, Square::G8, MoveKind::KingCastle));
-            }
+        if rights.can_castle(occupancy, Color::Black, true)
+            && !board.is_square_attacked(Square::E8, Color::White)
+            && !board.is_square_attacked(Square::F8, Color::White)
+            && !board.is_square_attacked(Square::G8, Color::White)
+        {
+            moves.push(Move::new_special(
+                Square::E8,
+                Square::G8,
+                MoveKind::KingCastle,
+            ));
         }
 
         // Queen side (e8c8)
-        if rights.can_castle(occupancy, Color::Black, false) {
-            if !board.is_square_attacked(Square::E8, Color::White) // King square first for tiny speedup
-                && !board.is_square_attacked(Square::D8, Color::White)
-                && !board.is_square_attacked(Square::C8, Color::White)
-            {
-                moves.push(Move::new_special(Square::E8, Square::C8, MoveKind::QueenCastle));
-            }
+        if rights.can_castle(occupancy, Color::Black, false)
+            && !board.is_square_attacked(Square::E8, Color::White)
+            && !board.is_square_attacked(Square::D8, Color::White)
+            && !board.is_square_attacked(Square::C8, Color::White)
+        {
+            moves.push(Move::new_special(
+                Square::E8,
+                Square::C8,
+                MoveKind::QueenCastle,
+            ));
         }
     }
 }

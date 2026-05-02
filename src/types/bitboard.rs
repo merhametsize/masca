@@ -11,7 +11,7 @@ use crate::types::Square;
 
 /// Bitboard object defined as a struct with unnamed u64 field.
 #[repr(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
@@ -99,12 +99,6 @@ impl fmt::Display for Bitboard {
             writeln!(f)?;
         }
         writeln!(f)
-    }
-}
-
-impl Default for Bitboard {
-    fn default() -> Self {
-        Bitboard(0u64)
     }
 }
 

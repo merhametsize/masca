@@ -47,7 +47,7 @@ const PATH_BLACK_OO: Bitboard = Square::F8.bb().or(Square::G8.bb());
 const PATH_BLACK_OOO: Bitboard = Square::B8.bb().or(Square::C8.bb()).or(Square::D8.bb());
 
 #[repr(transparent)] // Treat the struct exactly like a u8
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct CastlingRights {
     encoding: u8,
 }
@@ -125,11 +125,5 @@ impl CastlingRights {
             (Color::Black, false) => PATH_BLACK_OOO,
         };
         (occupancy.0 & path.0) == 0
-    }
-}
-
-impl Default for CastlingRights {
-    fn default() -> Self {
-        Self { encoding: 0 }
     }
 }

@@ -14,9 +14,9 @@ use crate::zobrist::{Zobrist, ZobristTables};
 /// This structure maintains multiple redundant representations of the position to enable fast move generation and evaluation.
 /// It also owns a stack of incremental states used to undo moves efficiently.
 pub struct Board {
-    mailbox: [Option<Piece>; 64],       // Piece-centric redundant representation
+    mailbox: [Option<Piece>; 64], // Piece-centric redundant representation
     pieces: [Bitboard; PieceKind::NUM], // p,n,b,r,q,k, color agnostic
-    colors: [Bitboard; 2],              // Per-color occupancy
+    colors: [Bitboard; 2],        // Per-color occupancy
     side_to_move: Color,
 
     state_stack: [State; MAX_PLY], // Array of states for move unmake
@@ -82,8 +82,15 @@ impl Board {
         // 2 - Remove captured piece, if any
         // ------------------------------------
         if m.is_capture() {
-            let captured_sq =
-                if m.is_enpassant() { if us == Color::White { to.south() } else { to.north() } } else { to };
+            let captured_sq = if m.is_enpassant() {
+                if us == Color::White {
+                    to.south()
+                } else {
+                    to.north()
+                }
+            } else {
+                to
+            };
             let captured_piece = self.piece_on_unchecked(captured_sq);
             self.remove_piece::<true>(captured_piece, captured_sq);
             self.store_capture(captured_piece);
@@ -134,7 +141,9 @@ impl Board {
         // ---------------------------------------
         // 6 - Update castling rights (branchless)
         // ---------------------------------------
-        self.state_stack[self.state_idx].castling.update_rights(from, to);
+        self.state_stack[self.state_idx]
+            .castling
+            .update_rights(from, to);
         let old = self.state_stack[self.state_idx - 1].castling.encoding();
         let new = self.state_stack[self.state_idx].castling.encoding();
         self.zobrist_update_castling(old, new);
@@ -143,7 +152,11 @@ impl Board {
         // 7 -    En passant activation
         // ---------------------------------------
         if m.is_double_push() {
-            let ep_sq = if us == Color::White { to.south() } else { to.north() };
+            let ep_sq = if us == Color::White {
+                to.south()
+            } else {
+                to.north()
+            };
             self.state_stack[self.state_idx].en_passant = Some(ep_sq);
         }
         let old_ep = self.state_stack[self.state_idx - 1].en_passant;
@@ -182,8 +195,15 @@ impl Board {
 
         // 3 - Restore captured piece
         if let Some(captured) = captured_piece {
-            let captured_sq =
-                if m.is_enpassant() { if us == Color::White { to.south() } else { to.north() } } else { to };
+            let captured_sq = if m.is_enpassant() {
+                if us == Color::White {
+                    to.south()
+                } else {
+                    to.north()
+                }
+            } else {
+                to
+            };
             self.add_piece::<false>(captured, captured_sq);
         }
 
@@ -412,7 +432,7 @@ impl Board {
     /// Returns the piece on a specific square. Does not check if a piece is actually present.
     #[inline(always)]
     pub fn piece_on_unchecked(&self, sq: Square) -> Piece {
-        debug_assert!(!self.mailbox[sq].is_none()); // There must be a piece in the square
+        debug_assert!(self.mailbox[sq].is_some()); // There must be a piece in the square
         unsafe { self.mailbox[sq].unwrap_unchecked() }
     }
 
@@ -468,14 +488,15 @@ impl Board {
 
     #[inline(always)]
     pub fn set_game_phase(&mut self) {
-        self.state_stack[self.state_idx].phase = eval::compute_game_phase(&self);
+        self.state_stack[self.state_idx].phase = eval::compute_game_phase(self);
     }
 
     /// Sets board to the starting position.
     /// # Panics
     /// Panics if the internal FEN parser fails.
     pub fn set_startpos(&mut self) {
-        self.from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
+        self.build_from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+            .unwrap();
     }
 
     /// Recomputes the zobrist key of the position from scratch.

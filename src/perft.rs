@@ -52,7 +52,11 @@ pub fn benchmark_perft(depth: u64) {
     assert!(nodes_vec.iter().all(|&n| n == nodes_vec[0]));
     let nodes = nodes_vec[0];
 
-    let nps = if avg_time > 0.0 { nodes as f64 / avg_time } else { 0.0 };
+    let nps = if avg_time > 0.0 {
+        nodes as f64 / avg_time
+    } else {
+        0.0
+    };
 
     println!("Depth: {}", depth);
     println!("Nodes: {:.2}", nodes);
@@ -101,7 +105,7 @@ pub fn perft_n(depth: u64) -> u64 {
 pub fn kiwipete(depth: u64) {
     let mut board = Board::new();
     let kiwipete_pos = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ";
-    board.from_fen(kiwipete_pos).unwrap();
+    board.build_from_fen(kiwipete_pos).unwrap();
 
     for depth in 1..=depth {
         let nodes = perft(&mut board, depth);

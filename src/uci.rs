@@ -20,7 +20,9 @@ pub struct Uci {
 impl Uci {
     /// Creates a new UCI controller with an empty board.
     pub fn new() -> Self {
-        Self { board: Board::new() }
+        Self {
+            board: Board::new(),
+        }
     }
 
     /// Runs the blocking UCI command loop.
@@ -97,7 +99,7 @@ impl Uci {
             }
 
             let fen = args[i + 1..i + 7].join(" ");
-            self.board.from_fen(&fen).unwrap();
+            self.board.build_from_fen(&fen).unwrap();
             i += 7;
         }
 
@@ -128,6 +130,7 @@ impl Uci {
                     }
                     i += 1;
                 }
+                "ciaone" => todo!(),
                 _ => {}
             }
             i += 1;

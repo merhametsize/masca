@@ -58,12 +58,13 @@ impl<'a> Searcher<'a> {
         for attacker in PieceKind::ALL {
             for victim in PieceKind::ALL {
                 use types::piece_value;
-                mvv_lva_table[attacker][victim] = 10_000 + (piece_value(victim) * 100) - piece_value(attacker);
+                mvv_lva_table[attacker][victim] =
+                    10_000 + (piece_value(victim) * 100) - piece_value(attacker);
             }
         }
 
         Self {
-            board: board,
+            board,
             best_move: Move::NULL_MOVE,
             nodes: 0,
 
@@ -75,7 +76,7 @@ impl<'a> Searcher<'a> {
             lmr_table: Self::init_lmr_table(),
             history: [[[0; 64]; 64]; 2],
 
-            mvv_lva_table: mvv_lva_table,
+            mvv_lva_table,
         }
     }
 
@@ -87,18 +88,23 @@ impl<'a> Searcher<'a> {
     pub fn iterative_deepening(&mut self, max_depth: usize) {
         self.nodes = 0;
         self.best_move = Move::NULL_MOVE;
-        self.pv_table.iter_mut().for_each(|t| t.fill(Move::NULL_MOVE));
+        self.pv_table
+            .iter_mut()
+            .for_each(|t| t.fill(Move::NULL_MOVE));
         self.pv_length.fill(0);
         self.killers = [[Move::NULL_MOVE; 2]; 64];
 
         for depth in 1..=max_depth {
             let score = self.search::<true>(depth, 0, -SCORE_INF, SCORE_INF);
 
-            print!("info depth {} score cp {} nodes {} pv", depth, score, self.nodes);
+            print!(
+                "info depth {} score cp {} nodes {} pv",
+                depth, score, self.nodes
+            );
             for i in 0..self.pv_length[0] {
                 print!(" {}", self.pv_table[0][i]);
             }
-            println!("");
+            println!();
 
             // TODO: early exit
         }
@@ -118,7 +124,13 @@ impl<'a> Searcher<'a> {
     /// `alpha` and `beta` define the search window.
     ///
     /// Returns the evaluation score from the perspective of the side to move.
-    fn search<const IS_PV: bool>(&mut self, depth: usize, ply: usize, mut alpha: i32, beta: i32) -> i32 {
+    fn search<const IS_PV: bool>(
+        &mut self,
+        depth: usize,
+        ply: usize,
+        mut alpha: i32,
+        beta: i32,
+    ) -> i32 {
         self.nodes += 1;
 
         let side = self.board.side_to_move();
@@ -140,7 +152,7 @@ impl<'a> Searcher<'a> {
         let mut moves = MoveList::new();
         let mut scores = [0; 256];
         generate_all_moves(self.board, &mut moves);
-        self.score_moves::<false>(&mut moves, ply, &mut scores);
+        self.score_moves::<false>(&moves, ply, &mut scores);
 
         // 4 - Null move pruning
         if !IS_PV && depth >= 3 && !in_check {
@@ -328,12 +340,17 @@ impl<'a> Searcher<'a> {
     /// The scores are written into `scores` and later used by `pick_best_move` for incremental move ordering.
     /// The scoring policy differs slightly during quiescence search.
     #[inline(always)]
-    fn score_moves<const QUIESCENCE: bool>(&self, moves: &MoveList, ply: usize, scores: &mut [i32; 256]) {
+    fn score_moves<const QUIESCENCE: bool>(
+        &self,
+        moves: &MoveList,
+        ply: usize,
+        scores: &mut [i32; 256],
+    ) {
         let n = moves.count();
 
-        for i in 0..n {
+        for (i, s) in scores.iter_mut().enumerate().take(n) {
             let m = unsafe { moves.get_unchecked(i) };
-            scores[i] = self.score_move::<QUIESCENCE>(m, ply);
+            *s = self.score_move::<QUIESCENCE>(m, ply);
         }
     }
 
@@ -348,7 +365,11 @@ impl<'a> Searcher<'a> {
         // 2 - Captures, MVV-LVA (most valuable victim - least valuable attacker)
         if m.is_capture() || m.is_enpassant() {
             let attacker = self.board.piece_on_unchecked(m.from()).kind();
-            let victim = if m.is_enpassant() { PieceKind::Pawn } else { self.board.piece_on_unchecked(m.to()).kind() };
+            let victim = if m.is_enpassant() {
+                PieceKind::Pawn
+            } else {
+                self.board.piece_on_unchecked(m.to()).kind()
+            };
 
             return self.mvv_lva_table[attacker][victim];
         }
@@ -405,14 +426,14 @@ impl<'a> Searcher<'a> {
     fn init_lmr_table() -> [[usize; 64]; 64] {
         let mut table = [[0usize; 64]; 64];
 
-        for depth in 1..64 {
-            for move_number in 1..64 {
-                let d = depth as f64;
+        for (depth, row) in table.iter_mut().enumerate().skip(1) {
+            let d = depth as f64;
+
+            for (move_number, cell) in row.iter_mut().enumerate().skip(1) {
                 let m = move_number as f64;
 
                 let reduction = (d.ln() * m.ln() / 2.0) as usize;
-
-                table[depth][move_number] = reduction;
+                *cell = reduction;
             }
         }
 

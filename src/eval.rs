@@ -182,8 +182,22 @@ impl PieceSquareTables {
     pub fn new() -> Self {
         let mut table = [[[0; 64]; 6]; 2];
 
-        let pst_midgame = [PAWN_MIDGAME, KNIGHT_MIDGAME, BISHOP_MIDGAME, ROOK_MIDGAME, QUEEN_MIDGAME, KING_MIDGAME];
-        let pst_endgame = [PAWN_ENDGAME, KNIGHT_ENDGAME, BISHOP_ENDGAME, ROOK_ENDGAME, QUEEN_ENDGAME, KING_ENDGAME];
+        let pst_midgame = [
+            PAWN_MIDGAME,
+            KNIGHT_MIDGAME,
+            BISHOP_MIDGAME,
+            ROOK_MIDGAME,
+            QUEEN_MIDGAME,
+            KING_MIDGAME,
+        ];
+        let pst_endgame = [
+            PAWN_ENDGAME,
+            KNIGHT_ENDGAME,
+            BISHOP_ENDGAME,
+            ROOK_ENDGAME,
+            QUEEN_ENDGAME,
+            KING_ENDGAME,
+        ];
 
         for piece in PieceKind::ALL {
             for sq in Square::ALL {
